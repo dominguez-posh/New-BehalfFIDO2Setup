@@ -27,6 +27,15 @@ if(-not (Get-Module Microsoft.Graph.Authentication)){
 
 }
 
+if(-not (Get-Module Microsoft.Graph.Users)){
+    
+    Write-Verbose "Installing Module..."
+    Install-Module -Name Microsoft.Graph.Users -Scope CurrentUser
+
+}
+
+
+
 #Void = Disconnect-MgGraph
 
 Write-Verbose "Logging in to Graph...." -Verbose
