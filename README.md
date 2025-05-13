@@ -2,6 +2,8 @@
 
 ## Beschreibung
 `New-BehalfFIDO2Setup` ist ein PowerShell-Skript, das die Einrichtung eines FIDO2-Sticks im Namen eines Benutzers ermöglicht. Es kann auch verwendet werden, um ein Break-Glass-Konto zu erstellen.
+Die Ausführung ist ohne Admin-Rechte möglich.
+Soll für einen User FIDO eingerichtet werden, das Erstellen eines BG-Accounts einfach mit "N" verneinen.
 
 ## Voraussetzungen
 - PowerShell
