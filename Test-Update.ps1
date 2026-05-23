@@ -21,8 +21,6 @@ if(-not (Get-Module Microsoft.Graph.Users)){
 
 }
 
-
-
 #Void = Disconnect-MgGraph
 
 Write-Verbose "Logging in to Graph...." -Verbose
