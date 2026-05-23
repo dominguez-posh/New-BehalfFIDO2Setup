@@ -1,25 +1,55 @@
 ## Remote FIDO2 Setup
 # Needed API Rights: UserAuthenticationMethod.ReadWrite.All
-if(-not (Get-Module DSInternals.Passkeys)){
-    
-    Write-Verbose "Installing Module..."
-    Install-Module -Name DSInternals.Passkeys -Scope CurrentUser
+
+
+#setting execution policy for this session to allow running the script without changing the system wide policy
+Set-ExecutionPolicy RemoteSigned -Scope Process -Force
+
+
+
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+
+function Install-ModuleInCurrentUserContext($ModuleName, $ForceVersion = $null) 
+{ 
+
+    Write-Verbose "Checking if $ModuleName Already installed" -Verbose
+
+    $InstalledModules = Get-InstalledModule 
+
+
+    if(-not ($InstalledModules | Where-Object { $_.Name -eq "$ModuleName" })){
+        
+        Write-Verbose "Installing Module $ModuleName ..." -Verbose
+        Install-Module -Name $ModuleName -Scope CurrentUser
+
+        Write-Verbose "Checking if $ModuleName installed after installation" -Verbose
+        if((Get-InstalledModule | Where-Object { $_.Name -eq "$ModuleName" })){
+
+            Write-Verbose "Module $ModuleName was successfully installed" -Verbose
+            return (Get-InstalledModule | Where-Object { $_.Name -eq "$ModuleName" })
+        }
+        else{
+            Write-Error "Module $ModuleName could not be installed"
+            return 1001
+        }
+
+    }
+    else{
+        $Version = ($InstalledModules | Where-Object { $_.Name -eq "$ModuleName" }).Version
+        Write-Verbose "Module allready installed in Version $Version no installation required" -Verbose
+        return (Get-InstalledModule | Where-Object { $_.Name -eq "$ModuleName" })
+    }
+
 
 }
 
-if(-not (Get-Module Microsoft.Graph.Authentication)){
-    
-    Write-Verbose "Installing Module..."
-    Install-Module -Name Microsoft.Graph.Authentication -Scope CurrentUser
 
-}
-
-if(-not (Get-Module Microsoft.Graph.Users)){
-    
-    Write-Verbose "Installing Module..."
-    Install-Module -Name Microsoft.Graph.Users -Scope CurrentUser
-
-}
+Write-Verbose "Installing all required Modules..." -Verbose
+Install-ModuleInCurrentUserContext DSInternals.Passkeys
+Install-ModuleInCurrentUserContext  Microsoft.Graph.Authentication
+Install-ModuleInCurrentUserContext Microsoft.Graph.Identity.SignIns
+Install-ModuleInCurrentUserContext Microsoft.Graph.Users
 
 #Void = Disconnect-MgGraph
 #just for testing perposures
@@ -27,7 +57,9 @@ if(-not (Get-Module Microsoft.Graph.Users)){
 
 Write-Verbose "Logging in to Graph...." -Verbose
 try{
-    $Connection =   Connect-MgGraph -Scopes UserAuthenticationMethod.ReadWrite.All, User.ReadWrite.All 
+    $Connection =   Connect-MgGraph -Scopes UserAuthenticationMethod.ReadWrite.All, User.ReadWrite.All
+    $Account = (Get-MgContext).Account
+
 }
 catch{
     Write-Error "NO CONNECTION with Graph POSSIBLE"
@@ -35,24 +67,21 @@ catch{
 }
 
 
+Write-Verbose "Logged in to Graph With Account  $Account" -Verbose
+
+
+
+
 #Selecting User
-$MGUser = (Get-MGUser -All | Out-GridView -OutputMode Single -Title "Select User to Config")
+Write-Verbose "Getting all Users from Graph. Selecting could be in Background!" -Verbose
+$MGUser = (Get-MGUser -All)
+
+
+$MGUser = $MGUser | Out-GridView -OutputMode Single -Title "Select User to Config"
 
 
 if($MGUser.UserPrincipalName.Length -le 64){
-    #Welcome
-    Write-Host "Selected User: "
-    Write-Host $MGUser.UserPrincipalName -ForegroundColor Green
-    Write-Host ""
 
-
-
-    #######################################################
-    ###### PiKl - Quick & Dirty ########################### 
-    #######################################################
-
-
-    #Getting Serial
     $Serial = (Read-Host -Prompt "INPUT FIDO STICK SERIAL OR INTERNAL ID")
     $DisplayName = "FIDO2-$Serial"
 
@@ -60,41 +89,16 @@ if($MGUser.UserPrincipalName.Length -le 64){
 
 
 
-    $Passkeyregistration =  Get-PasskeyRegistrationOptions -UserId $MGUser.UserPrincipalName
-    
-    #######################################################
-    #CHANGE
-    # Variable $PasskeyregistrationOptions war nicht gesetzt 
-    #$PassKeyRaw  = New-Passkey -Options $PasskeyregistrationOptions -DisplayName $DisplayNam
-    $PassKeyRaw  = New-Passkey -Options $Passkeyregistration -DisplayName $DisplayName
+    $Passkeyregistration =  Get-PasskeyRegistrationOptions -UserId $MGUser.UserPrincipalName 
+    $Passkeyregistration.Attestation
 
 
-    $body = @{
-        displayName = $DisplayName
-        publicKeyCredential = @{
-            id = ($PassKeyRaw.PublicKeyCred | ConvertFrom-Json).rawId
-            response = @{
-                #######################################################
-                #CHANGE
-                #response existiert nicht, jedoch AuthenticatorResponse. Daher blieb beides leer
-                #clientDataJSON    = $PassKey.publicKeyCredential.response.clientDataJSON
-                #attestationObject = $PassKey.publicKeyCredential.response.attestationObject
-                clientDataJSON    = ($PassKeyRaw.PublicKeyCred | ConvertFrom-Json).response.clientDataJSON
-                attestationObject = ($PassKeyRaw.PublicKeyCred | ConvertFrom-Json).response.attestationObject
-            }
-        }
-    } 
-    #######################################################
-    #CHANGE 
-    #| ConvertTo-Json #-Depth 10
 
-    Invoke-MgGraphRequest -Method 'POST' `
-    -Body $body `
-    -OutputType 'Json' `
-    -ContentType "application/json" `
-    -Uri "https://graph.microsoft.com/beta/users/$userUPN/authentication/fido2Methods"
+    $PassKey  = New-Passkey -Options $Passkeyregistration 
 
 
-    $Connection = Disconnect-MgGraph
+    $PasskeyEntraRegister = $Passkey | Register-Passkey -UserId $MGUser.UserPrincipalName -displayName $DisplayName  
+
+
 
 }  
