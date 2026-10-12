@@ -1,0 +1,7 @@
+# Gespeicherte QR-Codes enthalten TOTP-Secrets
+*.png
+
+# Editor / Betriebssystem
+.vscode/
+Thumbs.db
+desktop.ini
