@@ -39,13 +39,62 @@
         <Style TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource Text}"/>
         </Style>
+        <!-- Tabellen: flach, weiß, dezente Linien und Auswahl -->
         <Style TargetType="DataGrid">
             <Setter Property="AutoGenerateColumns" Value="False"/>
             <Setter Property="IsReadOnly" Value="True"/>
             <Setter Property="SelectionMode" Value="Single"/>
+            <Setter Property="SelectionUnit" Value="FullRow"/>
             <Setter Property="HeadersVisibility" Value="Column"/>
             <Setter Property="GridLinesVisibility" Value="Horizontal"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="#EEF1F4"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="RowBackground" Value="White"/>
+            <Setter Property="AlternatingRowBackground" Value="#FAFBFC"/>
+            <Setter Property="BorderBrush" Value="#E1E5EA"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CanUserResizeRows" Value="False"/>
+            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="#F1F5F9"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedText}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="BorderBrush" Value="#E1E5EA"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        </Style>
+        <Style TargetType="DataGridCell">
             <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{StaticResource Text}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Background="{TemplateBinding Background}" Padding="10,7">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#DBEAFE"/>
+                    <Setter Property="Foreground" Value="#0F172A"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="CellText" TargetType="TextBlock">
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+        </Style>
+        <Style TargetType="DataGridRow">
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#F1F5F9"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <!-- Benannte Stile -->
@@ -135,8 +184,8 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*" MinHeight="140"/>
-                    <RowDefinition Height="1.7*" MinHeight="260"/>
+                    <RowDefinition Height="*" MinHeight="120"/>
+                    <RowDefinition Height="2.4*" MinHeight="300"/>
                 </Grid.RowDefinitions>
 
                 <GroupBox Grid.Row="0" Header="1. Verbindung">
@@ -160,9 +209,9 @@
                 <GroupBox Grid.Row="2" Header="Suchergebnisse">
                     <DataGrid Name="DgUsers">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Anzeigename" Binding="{Binding DisplayName}" Width="2*"/>
-                            <DataGridTextColumn Header="UPN" Binding="{Binding UserPrincipalName}" Width="2*"/>
-                            <DataGridTextColumn Header="E-Mail" Binding="{Binding Mail}" Width="2*"/>
+                            <DataGridTextColumn Header="Anzeigename" Binding="{Binding DisplayName}" Width="2*" ElementStyle="{StaticResource CellText}"/>
+                            <DataGridTextColumn Header="UPN" Binding="{Binding UserPrincipalName}" Width="2*" ElementStyle="{StaticResource CellText}"/>
+                            <DataGridTextColumn Header="E-Mail" Binding="{Binding Mail}" Width="2*" ElementStyle="{StaticResource CellText}"/>
                             <DataGridCheckBoxColumn Header="Aktiv" Binding="{Binding AccountEnabled}" Width="70"/>
                         </DataGrid.Columns>
                     </DataGrid>
@@ -173,15 +222,22 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="110"/>
+                            <RowDefinition Height="90"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <DataGrid Name="DgMethods">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Methode" Binding="{Binding TypeName}" Width="1.6*"/>
-                                <DataGridTextColumn Header="Bezeichnung" Binding="{Binding DisplayName}" Width="1.6*"/>
-                                <DataGridTextColumn Header="Erstellt am" Binding="{Binding Created, StringFormat=dd.MM.yyyy HH:mm}" Width="115"/>
-                                <DataGridTextColumn Header="Details" Binding="{Binding Summary}" Width="3*"/>
+                                <DataGridTextColumn Header="Methode" Binding="{Binding TypeName}" Width="1.6*" ElementStyle="{StaticResource CellText}"/>
+                                <DataGridTextColumn Header="Bezeichnung" Binding="{Binding DisplayName}" Width="1.6*" ElementStyle="{StaticResource CellText}"/>
+                                <DataGridTextColumn Header="Erstellt am" Binding="{Binding Created, StringFormat=dd.MM.yyyy HH:mm}" Width="115" ElementStyle="{StaticResource CellText}"/>
+                                <DataGridTextColumn Header="Details" Binding="{Binding Summary}" Width="3*">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                            <Setter Property="ToolTip" Value="{Binding Summary}"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
                             </DataGrid.Columns>
                         </DataGrid>
                         <TextBlock Grid.Row="1" Text="Alle Eigenschaften der ausgewählten Methode" Style="{StaticResource Label}" Margin="0,10,0,4"/>
