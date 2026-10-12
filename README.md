@@ -2,6 +2,8 @@
 
 Grafisches PowerShell-Tool, mit dem Administratoren MFA-Methoden **im Namen anderer Benutzer** in Microsoft Entra ID anzeigen, einrichten und löschen können.
 
+![Hauptfenster des M365 MFA Administration Tools](docs/screenshot.png)
+
 ## Funktionen
 
 - **Benutzersuche** nach Anzeigename, Vor-/Nachname, UPN, E-Mail-Adresse oder Objekt-ID

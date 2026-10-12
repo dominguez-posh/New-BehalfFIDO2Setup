@@ -1,5 +1,7 @@
 # Gespeicherte QR-Codes enthalten TOTP-Secrets
 *.png
+# Ausnahme: Screenshots für die Dokumentation
+!docs/*.png
 
 # Editor / Betriebssystem
 .vscode/
