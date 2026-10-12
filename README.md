@@ -44,7 +44,7 @@ With this tool, administrators and help desk staff set up **multi-factor authent
 > [!TIP]
 > For quick access, create a desktop shortcut to `Start.cmd` (right-click → *Create shortcut*).
 
-On the very first start, required components are installed automatically. This can take one to two minutes. On the first sign-in, Microsoft asks once for consent to the tool's permissions.
+On the first sign-in, the tool checks whether required components are missing. If so, it lists them and asks once whether to install them – the installation runs in the background (about one to two minutes) and is shown in the log. Microsoft then asks once for consent to the tool's permissions.
 
 ---
 
@@ -170,7 +170,7 @@ The card already belongs to another user. Remove it there first.
 **Error message with "Authorization_RequestDenied" or "Forbidden".**
 Your account is missing an admin role (see [roles](#for-administrators-requirements-and-permissions)).
 
-Every action is listed with its time in the **log** at the bottom right – a screenshot of it helps with questions.
+Every action is listed with its time in the **log** at the bottom right. It is also saved immediately to a daily log file in the tool folder, e.g. `Logs\2026-10-12.log` (if the folder is not writable: `%LOCALAPPDATA%\M365MfaTool\Logs`) – helpful for questions.
 
 ---
 
@@ -258,6 +258,7 @@ In the **authentication methods policy** (Entra admin center → Protection → 
 | `Languages/*.json` | Texts per language (`en.json` is the reference) |
 | `Install-Prerequisites.ps1` | Optional advance installation of all modules |
 | `docs/` | Translated documentation and screenshots |
+| `Logs/` | Daily log files (created automatically, not stored in Git) |
 
 ---
 

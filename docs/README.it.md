@@ -47,7 +47,7 @@ Con questo strumento, amministratori e help desk configurano l'**autenticazione 
 > [!TIP]
 > Per un accesso rapido, creare un collegamento sul desktop a `Start.cmd` (clic destro → *Crea collegamento*).
 
-Al primo avvio i componenti necessari vengono installati automaticamente. Può richiedere uno o due minuti. Al primo accesso, Microsoft chiede una sola volta il consenso alle autorizzazioni dello strumento.
+Al primo accesso lo strumento verifica se mancano componenti necessari. In tal caso li elenca e chiede una sola volta se installarli – l'installazione avviene in background (circa uno o due minuti) ed è visibile nel log. Poi Microsoft chiede una sola volta il consenso alle autorizzazioni dello strumento.
 
 ---
 
@@ -173,7 +173,7 @@ La scheda appartiene già a un altro utente. Rimuoverla prima da lì.
 **Messaggio di errore con "Authorization_RequestDenied" o "Forbidden".**
 Al proprio account manca un ruolo di amministratore (vedi [ruoli](#requisiti-e-autorizzazioni-per-gli-amministratori)).
 
-Ogni azione è riportata con l'ora nel **log** in basso a destra – uno screenshot aiuta in caso di domande.
+Ogni azione è riportata con l'ora nel **log** in basso a destra. Viene inoltre salvata subito in un file di log giornaliero nella cartella dello strumento, ad es. `Logs\2026-10-12.log` (se la cartella non è scrivibile: `%LOCALAPPDATA%\M365MfaTool\Logs`) – utile in caso di domande.
 
 ---
 
@@ -261,6 +261,7 @@ Nei **criteri dei metodi di autenticazione** (Interfaccia di amministrazione di 
 | `Languages/*.json` | Testi per lingua (`en.json` è il riferimento) |
 | `Install-Prerequisites.ps1` | Installazione preliminare facoltativa di tutti i moduli |
 | `docs/` | Documentazione tradotta e screenshot |
+| `Logs/` | File di log giornalieri (creati automaticamente, non salvati in Git) |
 
 ---
 

@@ -47,7 +47,7 @@ To narzędzie pozwala administratorom i pracownikom helpdesku konfigurować **uw
 > [!TIP]
 > Aby mieć szybki dostęp, utwórz na pulpicie skrót do `Start.cmd` (prawy przycisk myszy → *Utwórz skrót*).
 
-Przy pierwszym uruchomieniu wymagane składniki instalują się automatycznie. Może to potrwać minutę lub dwie. Przy pierwszym logowaniu Microsoft jednorazowo prosi o zgodę na uprawnienia narzędzia.
+Przy pierwszym logowaniu narzędzie sprawdza, czy brakuje wymaganych składników. Jeśli tak, wyświetla ich listę i jednorazowo pyta, czy je zainstalować – instalacja odbywa się w tle (ok. minuty lub dwóch) i jest widoczna w dzienniku. Następnie Microsoft jednorazowo prosi o zgodę na uprawnienia narzędzia.
 
 ---
 
@@ -173,7 +173,7 @@ Karta należy już do innego użytkownika. Najpierw usuń ją u niego.
 **Komunikat o błędzie z „Authorization_RequestDenied” lub „Forbidden”.**
 Twojemu kontu brakuje roli administratora (zob. [role](#wymagania-i-uprawnienia-dla-administratorów)).
 
-Każda czynność jest zapisywana z godziną w **dzienniku** w prawym dolnym rogu – zrzut ekranu dziennika pomaga przy zgłoszeniach.
+Każda czynność jest zapisywana z godziną w **dzienniku** w prawym dolnym rogu. Dodatkowo jest od razu zapisywana w dziennym pliku dziennika w folderze narzędzia, np. `Logs\2026-10-12.log` (jeśli folder nie jest zapisywalny: `%LOCALAPPDATA%\M365MfaTool\Logs`) – przydatne przy zgłoszeniach.
 
 ---
 
@@ -261,6 +261,7 @@ W **zasadach metod uwierzytelniania** (Centrum administracyjne Entra → Ochrona
 | `Languages/*.json` | Teksty dla każdego języka (`en.json` jest wzorcem) |
 | `Install-Prerequisites.ps1` | Opcjonalna wcześniejsza instalacja wszystkich modułów |
 | `docs/` | Przetłumaczona dokumentacja i zrzuty ekranu |
+| `Logs/` | Dzienne pliki dziennika (tworzone automatycznie, nie są przechowywane w Git) |
 
 ---
 

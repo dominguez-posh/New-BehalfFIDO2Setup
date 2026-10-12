@@ -47,7 +47,7 @@ Avec cet outil, les administrateurs et le support informatique configurent **l'a
 > [!TIP]
 > Pour un accès rapide, créez un raccourci sur le bureau vers `Start.cmd` (clic droit → *Créer un raccourci*).
 
-Au tout premier démarrage, les composants nécessaires sont installés automatiquement. Cela peut prendre une à deux minutes. Lors de la première connexion, Microsoft demande une seule fois le consentement aux autorisations de l'outil.
+Lors de la première connexion, l'outil vérifie si des composants nécessaires manquent. Si c'est le cas, il les liste et demande une seule fois s'il faut les installer – l'installation s'exécute en arrière-plan (une à deux minutes environ) et s'affiche dans le journal. Microsoft demande ensuite une seule fois le consentement aux autorisations de l'outil.
 
 ---
 
@@ -173,7 +173,7 @@ La carte appartient déjà à un autre utilisateur. Retirez-la d'abord chez celu
 **Message d'erreur avec « Authorization_RequestDenied » ou « Forbidden ».**
 Il manque un rôle d'administration à votre compte (voir [rôles](#prérequis-et-autorisations-pour-les-administrateurs)).
 
-Chaque action figure avec son heure dans le **journal** en bas à droite – une capture d'écran de celui-ci aide en cas de question.
+Chaque action figure avec son heure dans le **journal** en bas à droite. Elle est aussi enregistrée immédiatement dans un fichier journal quotidien du dossier de l'outil, p. ex. `Logs\2026-10-12.log` (si le dossier n'est pas accessible en écriture : `%LOCALAPPDATA%\M365MfaTool\Logs`) – utile en cas de question.
 
 ---
 
@@ -261,6 +261,7 @@ Dans la **stratégie des méthodes d'authentification** (Centre d'administration
 | `Languages/*.json` | Textes par langue (`en.json` est la référence) |
 | `Install-Prerequisites.ps1` | Installation préalable facultative de tous les modules |
 | `docs/` | Documentation traduite et captures d'écran |
+| `Logs/` | Fichiers journaux quotidiens (créés automatiquement, non stockés dans Git) |
 
 ---
 

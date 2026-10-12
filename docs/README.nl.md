@@ -47,7 +47,7 @@ Met deze tool richten beheerders en helpdeskmedewerkers **meervoudige verificati
 > [!TIP]
 > Maak voor snelle toegang een snelkoppeling op het bureaublad naar `Start.cmd` (rechtsklikken → *Snelkoppeling maken*).
 
-Bij de allereerste start worden de benodigde onderdelen automatisch geïnstalleerd. Dit kan één tot twee minuten duren. Bij de eerste aanmelding vraagt Microsoft eenmalig om toestemming voor de machtigingen van de tool.
+Bij de eerste aanmelding controleert de tool of er benodigde onderdelen ontbreken. Zo ja, dan worden ze opgesomd en wordt eenmalig gevraagd of ze geïnstalleerd mogen worden – de installatie loopt op de achtergrond (ongeveer één tot twee minuten) en is zichtbaar in het logboek. Daarna vraagt Microsoft eenmalig om toestemming voor de machtigingen van de tool.
 
 ---
 
@@ -173,7 +173,7 @@ De kaart hoort al bij een andere gebruiker. Verwijder deze daar eerst.
 **Foutmelding met "Authorization_RequestDenied" of "Forbidden".**
 Uw account mist een beheerdersrol (zie [rollen](#vereisten-en-machtigingen-voor-beheerders)).
 
-Elke actie staat met tijdstip in het **logboek** rechtsonder – een schermafbeelding daarvan helpt bij vragen.
+Elke actie staat met tijdstip in het **logboek** rechtsonder. Daarnaast wordt deze direct opgeslagen in een dagelijks logbestand in de toolmap, bijv. `Logs\2026-10-12.log` (als de map niet beschrijfbaar is: `%LOCALAPPDATA%\M365MfaTool\Logs`) – handig bij vragen.
 
 ---
 
@@ -261,6 +261,7 @@ In het **beleid voor verificatiemethoden** (Entra-beheercentrum → Beveiliging 
 | `Languages/*.json` | Teksten per taal (`en.json` is de referentie) |
 | `Install-Prerequisites.ps1` | Optionele voorafgaande installatie van alle modules |
 | `docs/` | Vertaalde documentatie en schermafbeeldingen |
+| `Logs/` | Dagelijkse logbestanden (worden automatisch aangemaakt, niet in Git) |
 
 ---
 

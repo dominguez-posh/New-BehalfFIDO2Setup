@@ -33,6 +33,12 @@ Import-Module (Join-Path $script:AppRoot 'Modules\Provisioning.psm1') -Force
 # User settings (currently only the language)
 $script:SettingsPath = Join-Path $env:APPDATA 'M365MfaTool\settings.json'
 
+# Daily log files (Logs\yyyy-MM-dd.log); fallback if the tool folder is not writable
+$script:LogFolder = Join-Path $script:AppRoot 'Logs'
+# Path::Combine instead of Join-Path: does not fail at startup if the drive does not exist
+$script:FallbackLogFolder = [System.IO.Path]::Combine([string]$env:LOCALAPPDATA, 'M365MfaTool', 'Logs')
+$script:LogFileDisabled = $false
+
 function Read-Settings {
     try {
         if (Test-Path -LiteralPath $script:SettingsPath) {
@@ -162,6 +168,46 @@ function Update-DynamicTexts {
 
 #region UI helpers
 
+function Write-LogFile {
+    <#
+    .SYNOPSIS
+        Appends a line to the daily log file (Logs\yyyy-MM-dd.log) immediately.
+    .DESCRIPTION
+        Each line is written and flushed right away, so the log survives crashes. The file is opened
+        with shared read/write access, so it can be viewed in an editor while the tool is running.
+        If the tool folder is not writable, %LOCALAPPDATA%\M365MfaTool\Logs is used instead.
+    #>
+    param([Parameter(Mandatory)][string]$Line)
+    if ($script:LogFileDisabled) { return }
+
+    foreach ($attempt in 1, 2) {
+        try {
+            if (-not (Test-Path -LiteralPath $script:LogFolder)) { New-Item -ItemType Directory -Path $script:LogFolder -Force | Out-Null }
+            $file = Join-Path $script:LogFolder ('{0:yyyy-MM-dd}.log' -f (Get-Date))
+            $stream = [System.IO.File]::Open($file, 'Append', 'Write', 'ReadWrite')
+            try {
+                $writer = New-Object System.IO.StreamWriter ($stream, [System.Text.UTF8Encoding]::new($false))
+                $writer.WriteLine($Line)
+                $writer.Flush()
+            }
+            finally {
+                $stream.Dispose()
+            }
+            return
+        }
+        catch {
+            if ($attempt -eq 1 -and $script:LogFolder -ne $script:FallbackLogFolder) {
+                $script:LogFolder = $script:FallbackLogFolder
+                continue
+            }
+            # Logging to file is not possible at all: keep the GUI log working, report it once.
+            $script:LogFileDisabled = $true
+            $script:TxtLog.AppendText(('{0} [WARNING] {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), (T 'Log.FileFailed' $_.Exception.Message)) + [Environment]::NewLine)
+            return
+        }
+    }
+}
+
 function Write-UiLog {
     param(
         [Parameter(Mandatory)][string]$Message,
@@ -170,6 +216,7 @@ function Write-UiLog {
     $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level.ToUpperInvariant(), $Message
     $script:TxtLog.AppendText($line + [Environment]::NewLine)
     $script:TxtLog.ScrollToEnd()
+    Write-LogFile -Line $line
 }
 
 function Show-Message {
@@ -182,8 +229,42 @@ function Show-Message {
 }
 
 function Confirm-Action {
-    param([Parameter(Mandatory)][string]$Text, [Parameter(Mandatory)][string]$Title)
-    [System.Windows.MessageBox]::Show($Text, $Title, 'YesNo', 'Warning', 'No') -eq 'Yes'
+    param(
+        [Parameter(Mandatory)][string]$Text,
+        [Parameter(Mandatory)][string]$Title,
+        [ValidateSet('Warning', 'Question')][string]$Icon = 'Warning',
+        [switch]$DefaultYes
+    )
+    $default = if ($DefaultYes) { 'Yes' } else { 'No' }
+    [System.Windows.MessageBox]::Show($Text, $Title, 'YesNo', $Icon, $default) -eq 'Yes'
+}
+
+function Install-MissingModules {
+    <#
+    .SYNOPSIS
+        Asks once in the GUI and installs all missing modules without console prompts.
+        Returns $false if the user declined.
+    #>
+    $missing = @(Get-MissingModules)
+    if (-not $missing.Count) { return $true }
+
+    $list = ($missing | ForEach-Object { '• ' + $_.Name + $(if ($_.RequiredVersion) { " $($_.RequiredVersion)" } else { '' }) }) -join "`n"
+    if (-not (Confirm-Action -Text (T 'Modules.ConfirmInstall' $list) -Title (T 'Title.Prerequisites') -Icon Question -DefaultYes)) {
+        Write-UiLog (T 'Modules.Declined') 'Warning'
+        return $false
+    }
+
+    $script:TxtConnectionStatus.Text = T 'Header.Installing'
+    $script:TxtConnectionStatus.Foreground = '#FCD34D'
+    $index = 0
+    foreach ($module in $missing) {
+        $index++
+        Write-UiLog (T 'Modules.InstallingProgress' $index $missing.Count $module.Name)
+        Install-RequiredModule -Name $module.Name -RequiredVersion $module.RequiredVersion -SkipPublisherCheck:$module.SkipPublisherCheck `
+            -Wait { param($Milliseconds) Wait-Ui $Milliseconds }
+        Write-UiLog (T 'Modules.Installed' $module.Name) 'Success'
+    }
+    $true
 }
 
 function Write-UiError {
@@ -529,6 +610,8 @@ $CmbLanguage.Add_SelectionChanged({
 $BtnLogin.Add_Click({
     try {
         Set-Busy $true
+        # Install missing modules first, visibly in the GUI (instead of console prompts in the background)
+        if (-not (Install-MissingModules)) { return }
         Write-UiLog (T 'Log.SigningIn')
         $context = Connect-M365Graph
         Set-ConnectionStatus $context
@@ -536,6 +619,7 @@ $BtnLogin.Add_Click({
         $TxtSearch.Focus() | Out-Null
     }
     catch {
+        Set-ConnectionStatus $script:Context
         Write-UiError -Message $_.Exception.Message -Title (T 'Title.SignInError')
     }
     finally {
@@ -933,7 +1017,10 @@ Clear-SelectedUser
 Update-MethodInputs
 Set-Busy $false
 
+# Separator in the log file so that several sessions per day can be told apart
+Write-LogFile -Line ('{0} ===== M365 MFA Administration Tool started by {1}\{2} on {3} =====' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $env:USERDOMAIN, $env:USERNAME, $env:COMPUTERNAME)
 Write-UiLog (T 'Log.Started')
+if (-not $script:LogFileDisabled) { Write-UiLog (T 'Log.FileLocation' $script:LogFolder) }
 $window.ShowDialog() | Out-Null
 
 #endregion

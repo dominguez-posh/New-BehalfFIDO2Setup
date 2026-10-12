@@ -47,7 +47,7 @@ Con esta herramienta, los administradores y el personal del servicio de asistenc
 > [!TIP]
 > Para un acceso rápido, cree un acceso directo en el escritorio a `Start.cmd` (clic derecho → *Crear acceso directo*).
 
-En el primer inicio se instalan automáticamente los componentes necesarios. Esto puede tardar uno o dos minutos. En el primer inicio de sesión, Microsoft solicita una única vez el consentimiento para los permisos de la herramienta.
+En el primer inicio de sesión, la herramienta comprueba si faltan componentes necesarios. Si es así, los enumera y pregunta una sola vez si deben instalarse; la instalación se ejecuta en segundo plano (uno o dos minutos) y se muestra en el registro. Después, Microsoft solicita una única vez el consentimiento para los permisos de la herramienta.
 
 ---
 
@@ -173,7 +173,7 @@ La tarjeta ya pertenece a otro usuario. Elimínela primero allí.
 **Mensaje de error con "Authorization_RequestDenied" o "Forbidden".**
 A su cuenta le falta un rol de administrador (ver [roles](#para-administradores-requisitos-y-permisos)).
 
-Cada acción aparece con su hora en el **registro** de la parte inferior derecha; una captura de pantalla ayuda en caso de consultas.
+Cada acción aparece con su hora en el **registro** de la parte inferior derecha. Además, se guarda de inmediato en un archivo de registro diario en la carpeta de la herramienta, p. ej. `Logs\2026-10-12.log` (si la carpeta no admite escritura: `%LOCALAPPDATA%\M365MfaTool\Logs`), útil en caso de consultas.
 
 ---
 
@@ -261,6 +261,7 @@ En la **directiva de métodos de autenticación** (Centro de administración de 
 | `Languages/*.json` | Textos por idioma (`en.json` es la referencia) |
 | `Install-Prerequisites.ps1` | Instalación previa opcional de todos los módulos |
 | `docs/` | Documentación traducida y capturas de pantalla |
+| `Logs/` | Archivos de registro diarios (se crean automáticamente, no se guardan en Git) |
 
 ---
 

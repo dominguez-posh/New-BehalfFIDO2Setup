@@ -61,11 +61,8 @@ function Import-RequiredModule {
     $available = @(Get-Module -ListAvailable -Name $Name |
         Where-Object { -not $RequiredVersion -or $_.Version -eq [version]$RequiredVersion })
     if (-not $available.Count) {
-        $params = @{ Name = $Name; Scope = 'CurrentUser'; Repository = 'PSGallery'; Force = $true; AllowClobber = $true; ErrorAction = 'Stop' }
-        if ($RequiredVersion) { $params.RequiredVersion = $RequiredVersion }
-        if ($SkipPublisherCheck) { $params.SkipPublisherCheck = $true }
-        try { Install-Module @params }
-        catch { throw (T 'Module.InstallFailed' $Name $_.Exception.Message) }
+        # Normally already installed at sign-in; otherwise install now without console prompts.
+        Install-RequiredModule -Name $Name -RequiredVersion $RequiredVersion -SkipPublisherCheck:$SkipPublisherCheck
     }
 
     if ($loaded) { Remove-Module -Name $Name -Force -ErrorAction SilentlyContinue }

@@ -22,6 +22,88 @@ $script:RoleDefinitionNames = $null   # Cache: role ID -> display name
 
 #region Module management
 
+# All PowerShell modules the tool needs (installed for the current user from the PowerShell Gallery)
+$script:RequiredModules = @(
+    @{ Name = 'Microsoft.Graph.Authentication' }
+    @{ Name = 'Microsoft.Graph.Identity.SignIns' }                                         # required by DSInternals.Passkeys
+    @{ Name = 'DSInternals.Passkeys'; RequiredVersion = '1.0.6'; SkipPublisherCheck = $true } # FIDO2, newer versions have a changed API
+    @{ Name = 'QRCodeGenerator' }                                                          # QR code for programmable TOTP cards
+)
+
+function Get-MissingModules {
+    <#
+    .SYNOPSIS
+        Returns the required modules that are not installed yet.
+    #>
+    Add-UserModulePath
+    foreach ($module in $script:RequiredModules) {
+        $installed = @(Get-Module -ListAvailable -Name $module.Name |
+            Where-Object { -not $module['RequiredVersion'] -or $_.Version -eq [version]$module['RequiredVersion'] })
+        if (-not $installed.Count) {
+            [pscustomobject]@{
+                Name               = $module.Name
+                RequiredVersion    = $module['RequiredVersion']
+                SkipPublisherCheck = [bool]$module['SkipPublisherCheck']
+            }
+        }
+    }
+}
+
+function Install-RequiredModule {
+    <#
+    .SYNOPSIS
+        Installs a module for the current user without any console prompts.
+    .DESCRIPTION
+        Runs in a background job so that the GUI stays responsive and no interactive prompt
+        (NuGet provider, untrusted repository) can block it. The NuGet provider is installed
+        silently if needed.
+    .PARAMETER Wait
+        Called with milliseconds while waiting for the job (GUI: wait without freezing).
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [string]$RequiredVersion,
+        [switch]$SkipPublisherCheck,
+        [scriptblock]$Wait = { param($Milliseconds) Start-Sleep -Milliseconds $Milliseconds }
+    )
+
+    $job = Start-Job -ArgumentList $Name, $RequiredVersion, ([bool]$SkipPublisherCheck) -ScriptBlock {
+        param($Name, $RequiredVersion, $SkipPublisherCheck)
+        $ErrorActionPreference = 'Stop'
+        $ProgressPreference = 'SilentlyContinue'
+        # The PowerShell Gallery requires TLS 1.2
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+        $nuget = Get-PackageProvider -ListAvailable -Name NuGet -ErrorAction SilentlyContinue |
+            Where-Object { $_.Version -ge [version]'2.8.5.201' }
+        if (-not $nuget) {
+            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force | Out-Null
+        }
+
+        $params = @{ Name = $Name; Repository = 'PSGallery'; Scope = 'CurrentUser'; Force = $true; AllowClobber = $true; Confirm = $false }
+        if ($RequiredVersion) { $params.RequiredVersion = $RequiredVersion }
+        if ($SkipPublisherCheck) { $params.SkipPublisherCheck = $true }
+        Install-Module @params
+    }
+
+    try {
+        while ($job.State -in 'NotStarted', 'Running') { & $Wait 300 }
+        Receive-Job -Job $job -ErrorAction Stop | Out-Null
+        if ($job.State -ne 'Completed') { throw $job.ChildJobs[0].JobStateInfo.Reason }
+    }
+    catch {
+        throw (T 'Module.InstallFailed' $Name $_.Exception.Message)
+    }
+    finally {
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+    }
+
+    Add-UserModulePath
+    $installed = @(Get-Module -ListAvailable -Name $Name |
+        Where-Object { -not $RequiredVersion -or $_.Version -eq [version]$RequiredVersion })
+    if (-not $installed.Count) { throw (T 'Module.NotFoundAfterInstall' $Name) }
+}
+
 function Add-UserModulePath {
     # Install-Module -Scope CurrentUser installs to <Documents>\WindowsPowerShell\Modules.
     # When powershell.exe is started e.g. from VS Code or pwsh 7, this path is sometimes missing from PSModulePath.
@@ -63,15 +145,7 @@ function Assert-GraphModules {
 
     if (-not (Get-Module -ListAvailable -Name $moduleName)) {
         Write-Host (T 'Module.Installing' $moduleName) -ForegroundColor Cyan
-        try {
-            Install-Module -Name $moduleName -Repository PSGallery -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
-        }
-        catch {
-            throw (T 'Module.InstallFailed' $moduleName $_.Exception.Message)
-        }
-        if (-not (Get-Module -ListAvailable -Name $moduleName)) {
-            throw (T 'Module.NotFoundAfterInstall' $moduleName)
-        }
+        Install-RequiredModule -Name $moduleName
     }
 
     $importParams = @{ Name = $moduleName; ErrorAction = 'Stop' }
@@ -627,6 +701,8 @@ function Remove-M365UserAuthMethod {
 
 Export-ModuleMember -Function @(
     'Assert-GraphModules'
+    'Get-MissingModules'
+    'Install-RequiredModule'
     'Test-M365GraphConnection'
     'Connect-M365Graph'
     'Disconnect-M365Graph'

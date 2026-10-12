@@ -7,3 +7,6 @@
 .vscode/
 Thumbs.db
 desktop.ini
+
+# Daily log files of the tool
+Logs/

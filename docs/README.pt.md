@@ -47,7 +47,7 @@ Com esta ferramenta, administradores e equipas de suporte configuram a **autenti
 > [!TIP]
 > Para um acesso rápido, crie um atalho no ambiente de trabalho para `Start.cmd` (clique direito → *Criar atalho*).
 
-No primeiro arranque, os componentes necessários são instalados automaticamente. Isto pode demorar um a dois minutos. No primeiro início de sessão, a Microsoft pede uma única vez o consentimento para as permissões da ferramenta.
+No primeiro início de sessão, a ferramenta verifica se faltam componentes necessários. Se for o caso, lista-os e pergunta uma única vez se devem ser instalados – a instalação decorre em segundo plano (cerca de um a dois minutos) e é mostrada no registo. Depois, a Microsoft pede uma única vez o consentimento para as permissões da ferramenta.
 
 ---
 
@@ -173,7 +173,7 @@ O cartão já pertence a outro utilizador. Remova-o primeiro aí.
 **Mensagem de erro com "Authorization_RequestDenied" ou "Forbidden".**
 Falta uma função de administrador à sua conta (ver [funções](#requisitos-e-permissões-para-administradores)).
 
-Cada ação fica registada com a hora no **registo** no canto inferior direito – uma captura de ecrã ajuda em caso de dúvidas.
+Cada ação fica registada com a hora no **registo** no canto inferior direito. Além disso, é guardada de imediato num ficheiro de registo diário na pasta da ferramenta, p. ex. `Logs\2026-10-12.log` (se a pasta não permitir escrita: `%LOCALAPPDATA%\M365MfaTool\Logs`) – útil em caso de dúvidas.
 
 ---
 
@@ -261,6 +261,7 @@ Na **política de métodos de autenticação** (Centro de administração do Ent
 | `Languages/*.json` | Textos por idioma (`en.json` é a referência) |
 | `Install-Prerequisites.ps1` | Instalação prévia opcional de todos os módulos |
 | `docs/` | Documentação traduzida e capturas de ecrã |
+| `Logs/` | Ficheiros de registo diários (criados automaticamente, não guardados no Git) |
 
 ---
 

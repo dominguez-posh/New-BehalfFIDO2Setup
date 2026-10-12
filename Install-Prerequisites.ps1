@@ -4,26 +4,29 @@
     Installs all modules required by the M365 MFA Administration Tool for the current user.
 
 .DESCRIPTION
-    Optional - otherwise, missing modules are installed automatically on first start
-    or first use.
+    Optional - otherwise, the tool asks at the first sign-in and installs missing modules itself.
+    Uses the same module list and installation routine as the tool (Modules\Graph.psm1),
+    so no console prompts (NuGet provider, untrusted repository) appear.
 #>
 [CmdletBinding()]
 param()
 
 $ErrorActionPreference = 'Stop'
 
-$modules = @(
-    @{ Name = 'Microsoft.Graph.Authentication' }
-    @{ Name = 'Microsoft.Graph.Identity.SignIns' }                                        # required by DSInternals.Passkeys
-    @{ Name = 'DSInternals.Passkeys'; RequiredVersion = '1.0.6'; SkipPublisherCheck = $true } # FIDO2, newer versions have a changed API
-    @{ Name = 'QRCodeGenerator' }                                                         # QR code for programmable TOTP cards
-)
+$appRoot = Split-Path -Parent $PSCommandPath
+Import-Module (Join-Path $appRoot 'Modules\Localization.psm1') -Force -Global
+Import-Module (Join-Path $appRoot 'Modules\Graph.psm1') -Force -Global
+Initialize-Localization -Path (Join-Path $appRoot 'Languages') -Language 'en'
 
-Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-
-foreach ($module in $modules) {
-    Write-Host "Installiere $($module.Name) ..." -ForegroundColor Cyan
-    Install-Module @module -Repository PSGallery -Scope CurrentUser -Force -AllowClobber
+$missing = @(Get-MissingModules)
+if (-not $missing.Count) {
+    Write-Host 'All required modules are already installed.' -ForegroundColor Green
+    return
 }
 
-Write-Host 'Voraussetzungen wurden installiert.' -ForegroundColor Green
+foreach ($module in $missing) {
+    Write-Host "Installing $($module.Name) ..." -ForegroundColor Cyan
+    Install-RequiredModule -Name $module.Name -RequiredVersion $module.RequiredVersion -SkipPublisherCheck:$module.SkipPublisherCheck
+}
+
+Write-Host 'All required modules have been installed.' -ForegroundColor Green

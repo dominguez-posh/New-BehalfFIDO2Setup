@@ -44,7 +44,7 @@ Mit diesem Tool richten Administratoren und Helpdesk-Mitarbeitende **Multi-Fakto
 > [!TIP]
 > Für den schnellen Zugriff einfach eine Desktop-Verknüpfung auf `Start.cmd` anlegen (Rechtsklick → *Verknüpfung erstellen*).
 
-Beim allerersten Start werden benötigte Komponenten automatisch installiert. Das kann ein bis zwei Minuten dauern. Bei der ersten Anmeldung fragt Microsoft einmalig nach der Zustimmung zu den Berechtigungen des Tools.
+Bei der ersten Anmeldung prüft das Tool, ob benötigte Komponenten fehlen. Falls ja, listet es sie auf und fragt einmalig, ob sie installiert werden sollen – die Installation läuft im Hintergrund (etwa ein bis zwei Minuten) und wird im Protokoll angezeigt. Danach fragt Microsoft einmalig nach der Zustimmung zu den Berechtigungen des Tools.
 
 ---
 
@@ -170,7 +170,7 @@ Die Karte gehört schon einem anderen Benutzer. Dort zuerst entfernen.
 **Fehlermeldung mit „Authorization_RequestDenied“ oder „Forbidden“.**
 Dem eigenen Konto fehlt eine Admin-Rolle (siehe [Rollen](#für-administratoren-voraussetzungen-und-berechtigungen)).
 
-Jede Aktion steht mit Uhrzeit im **Protokoll** unten rechts – bei Rückfragen hilft ein Screenshot davon.
+Jede Aktion steht mit Uhrzeit im **Protokoll** unten rechts. Zusätzlich wird sie sofort in eine tägliche Protokolldatei im Tool-Ordner geschrieben, z. B. `Logs\2026-10-12.log` (falls der Ordner nicht beschreibbar ist: `%LOCALAPPDATA%\M365MfaTool\Logs`) – hilfreich bei Rückfragen.
 
 ---
 
@@ -258,6 +258,7 @@ In den **Authentifizierungsmethoden-Richtlinien** (Entra Admin Center → Schutz
 | `Languages/*.json` | Texte je Sprache (`en.json` ist die Referenz) |
 | `Install-Prerequisites.ps1` | Optionale Vorabinstallation aller Module |
 | `docs/` | Übersetzte Dokumentation und Screenshots |
+| `Logs/` | Tägliche Protokolldateien (werden automatisch angelegt, nicht in Git) |
 
 ---
 
