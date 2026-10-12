@@ -1,11 +1,11 @@
 ﻿#requires -Version 5.1
 <#
 .SYNOPSIS
-    Installiert alle vom M365 MFA Administration Tool benötigten Module für den aktuellen Benutzer.
+    Installs all modules required by the M365 MFA Administration Tool for the current user.
 
 .DESCRIPTION
-    Optional - fehlende Module werden sonst beim ersten Start bzw. bei der ersten Nutzung
-    automatisch installiert.
+    Optional - otherwise, missing modules are installed automatically on first start
+    or first use.
 #>
 [CmdletBinding()]
 param()
@@ -14,9 +14,9 @@ $ErrorActionPreference = 'Stop'
 
 $modules = @(
     @{ Name = 'Microsoft.Graph.Authentication' }
-    @{ Name = 'Microsoft.Graph.Identity.SignIns' }                                        # benötigt von DSInternals.Passkeys
-    @{ Name = 'DSInternals.Passkeys'; RequiredVersion = '1.0.6'; SkipPublisherCheck = $true } # FIDO2, neuere Versionen haben eine geänderte API
-    @{ Name = 'QRCodeGenerator' }                                                         # QR-Code für programmierbare TOTP-Karten
+    @{ Name = 'Microsoft.Graph.Identity.SignIns' }                                        # required by DSInternals.Passkeys
+    @{ Name = 'DSInternals.Passkeys'; RequiredVersion = '1.0.6'; SkipPublisherCheck = $true } # FIDO2, newer versions have a changed API
+    @{ Name = 'QRCodeGenerator' }                                                         # QR code for programmable TOTP cards
 )
 
 Set-PSRepository -Name PSGallery -InstallationPolicy Trusted

@@ -1,35 +1,31 @@
 ﻿<#
 .SYNOPSIS
-    Einrichtung von MFA-Methoden im Namen eines Benutzers.
+    Sets up MFA methods on behalf of a user.
 
 .DESCRIPTION
-    FIDO2 (DSInternals.Passkeys), Hardware-OATH/TOTP (feste und programmierbare Karten, Fake-MFA)
-    und Temporary Access Pass. Benötigt die Graph-Funktionen aus Graph.psm1
-    (Invoke-M365GraphRequest, ConvertTo-LocalDate), die global geladen sein müssen.
+    FIDO2 (DSInternals.Passkeys), hardware OATH/TOTP (fixed and programmable cards, fake MFA)
+    and Temporary Access Pass. Requires the Graph functions from Graph.psm1
+    (Invoke-M365GraphRequest, ConvertTo-LocalDate), which must be loaded globally.
 #>
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Anzeigenamen im Dropdown (UI\MainWindow.xaml) - müssen exakt übereinstimmen.
-$script:MethodFido2     = 'FIDO2 Security Key'
-$script:MethodFixedTotp = 'TOTP-Karte mit festem Secret'
-$script:MethodProgTotp  = 'Programmierbare TOTP-Karte'
-$script:MethodTap       = 'Temporary Access Pass (2 Stunden)'
-$script:MethodFakeMfa   = 'Fake-MFA (TOTP ohne Hinterlegung)'
+# Methods are addressed by language-independent IDs (see Invoke-MfaProvisioning);
+# the display names come from the language files (Languages/*.json).
 
 $script:TapLifetimeMinutes  = 120
 $script:OathManufacturer    = 'unique projects'
 $script:OathIssuer          = 'Microsoft 365'
 $script:Base32Alphabet      = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
-$script:Fido2ModuleVersion  = '1.0.6'   # Neuere DSInternals.Passkeys-Versionen haben eine geänderte API
+$script:Fido2ModuleVersion  = '1.0.6'   # Newer DSInternals.Passkeys versions have a changed API
 $script:AuthMethodPolicyUrl = 'https://entra.microsoft.com/#view/Microsoft_AAD_IAM/AuthenticationMethodsMenuBlade/~/AdminAuthMethods'
 
-#region Allgemeine Hilfsfunktionen
+#region General helpers
 
 function New-ProvisioningResult {
-    # AddedMethodIds/RemovedMethodIds: IDs der angelegten bzw. entfernten Methoden.
-    # Die GUI wartet damit nach der Provisionierung, bis Graph den neuen Stand liefert.
+    # AddedMethodIds/RemovedMethodIds: IDs of the created or removed methods.
+    # After provisioning, the GUI uses them to wait until Graph returns the new state.
     param(
         [Parameter(Mandatory)][string]$Message,
         $TemporaryAccessPass = $null,
@@ -49,7 +45,7 @@ function New-ProvisioningResult {
 function Get-RequiredOption {
     param([hashtable]$Options, [string]$Name, [string]$Label)
     $value = if ($Options -and $Options.ContainsKey($Name)) { [string]$Options[$Name] } else { '' }
-    if ([string]::IsNullOrWhiteSpace($value)) { throw "Bitte '$Label' angeben." }
+    if ([string]::IsNullOrWhiteSpace($value)) { throw (T 'Prov.MissingInput' (T $Label)) }
     return $value.Trim()
 }
 
@@ -69,14 +65,14 @@ function Import-RequiredModule {
         if ($RequiredVersion) { $params.RequiredVersion = $RequiredVersion }
         if ($SkipPublisherCheck) { $params.SkipPublisherCheck = $true }
         try { Install-Module @params }
-        catch { throw "Modul '$Name' konnte nicht installiert werden: $($_.Exception.Message)" }
+        catch { throw (T 'Module.InstallFailed' $Name $_.Exception.Message) }
     }
 
     if ($loaded) { Remove-Module -Name $Name -Force -ErrorAction SilentlyContinue }
     $importParams = @{ Name = $Name; ErrorAction = 'Stop' }
     if ($RequiredVersion) { $importParams.RequiredVersion = $RequiredVersion }
     try { Import-Module @importParams }
-    catch { throw "Modul '$Name' konnte nicht geladen werden: $($_.Exception.Message)" }
+    catch { throw (T 'Module.LoadFailed' $Name $_.Exception.Message) }
 }
 
 #endregion
@@ -116,7 +112,7 @@ function ConvertFrom-Base32 {
     $bitCount = 0
     foreach ($char in $Secret.ToCharArray()) {
         $value = $script:Base32Alphabet.IndexOf($char)
-        if ($value -lt 0) { throw "Ungültiges Base32-Zeichen im Secret: '$char'" }
+        if ($value -lt 0) { throw (T 'Totp.InvalidChar' $char) }
         $buffer = (($buffer -shl 5) -bor $value) -band 0xFFFF
         $bitCount += 5
         if ($bitCount -ge 8) {
@@ -130,13 +126,13 @@ function ConvertFrom-Base32 {
 function ConvertTo-NormalizedTotpSecret {
     param([Parameter(Mandatory)][string]$Secret)
     $normalized = ($Secret -replace '[\s\-=]', '').ToUpperInvariant()
-    if ($normalized -notmatch '^[A-Z2-7]+$') { throw 'Das Secret ist kein gültiger Base32-Wert (erlaubt: A-Z und 2-7).' }
-    if ($normalized.Length -lt 16) { throw 'Das Secret ist zu kurz (mindestens 16 Base32-Zeichen).' }
+    if ($normalized -notmatch '^[A-Z2-7]+$') { throw (T 'Totp.InvalidSecret') }
+    if ($normalized.Length -lt 16) { throw (T 'Totp.SecretTooShort') }
     $normalized
 }
 
 function New-TotpSecret {
-    param([int]$ByteLength = 20) # 160 Bit Entropie ist Standard
+    param([int]$ByteLength = 20) # 160 bits of entropy is the standard
     $bytes = New-Object byte[] $ByteLength
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
     ConvertTo-Base32 -Bytes $bytes
@@ -167,7 +163,7 @@ function Get-TotpCode {
 
 function New-TotpQrCodePng {
     param([Parameter(Mandatory)][string]$Text)
-    # QRCodeGenerator bringt QRCoder mit; der QR-Code wird nur im Speicher erzeugt (keine Datei mit Secret auf der Platte).
+    # QRCodeGenerator ships QRCoder; the QR code is generated in memory only (no file containing the secret on disk).
     Import-RequiredModule -Name 'QRCodeGenerator'
     $generator = New-Object -TypeName QRCoder.QRCodeGenerator
     $data = $generator.CreateQrCode($Text, 'Q')
@@ -190,9 +186,9 @@ function Find-HardwareOathDevice {
 
 function New-HardwareOathTotp {
     <#
-        Legt ein Hardware-OATH-Gerät an (bzw. nutzt ein vorhandenes, nicht zugewiesenes),
-        weist es dem Benutzer zu und aktiviert es mit einem aus dem Secret berechneten Code.
-        Gibt MethodId und DeviceId zurück. Bei Fehlern wird zurückgerollt.
+        Creates a hardware OATH device (or reuses an existing, unassigned one),
+        assigns it to the user and activates it with a code calculated from the secret.
+        Returns MethodId and DeviceId. Rolls back on errors.
     #>
     param(
         [Parameter(Mandatory)]$User,
@@ -214,13 +210,13 @@ function New-HardwareOathTotp {
         if ($null -ne $existing) {
             $assignedTo = $existing['assignedTo']
             if ($assignedTo -is [System.Collections.IDictionary] -and $assignedTo['id']) {
-                throw "Ein Token mit der Seriennummer '$SerialNumber' ist bereits '$($assignedTo['displayName'])' zugewiesen. Bitte dort zuerst entfernen."
+                throw (T 'Totp.AlreadyAssigned' $SerialNumber $assignedTo['displayName'])
             }
             if ($ReuseExistingDevice) {
                 $deviceId = [string]$existing['id']
             }
             else {
-                # Neues Secret -> vorhandenen, nicht zugewiesenen Eintrag ersetzen.
+                # New secret -> replace the existing, unassigned entry.
                 Invoke-M365GraphRequest -Method DELETE -Uri "$devicesUri/$([uri]::EscapeDataString([string]$existing['id']))" | Out-Null
             }
         }
@@ -253,28 +249,28 @@ function New-HardwareOathTotp {
     }
     catch {
         $message = $_.Exception.Message
-        # Rollback, damit keine halb eingerichteten Token zurückbleiben.
+        # Roll back so that no half-configured tokens remain.
         if ($assignedMethodId) {
             try { Invoke-M365GraphRequest -Method DELETE -Uri "beta/users/$userPart/authentication/hardwareOathMethods/$([uri]::EscapeDataString($assignedMethodId))" | Out-Null } catch { }
         }
         if ($createdDevice -and $deviceId) {
             try { Invoke-M365GraphRequest -Method DELETE -Uri "$devicesUri/$([uri]::EscapeDataString($deviceId))" | Out-Null } catch { }
         }
-        throw "TOTP-Token konnte nicht eingerichtet werden: $message"
+        throw (T 'Totp.SetupFailed' $message)
     }
 }
 
 #endregion
 
-#region Provisionierungsmethoden
+#region Provisioning methods
 
 function Start-Fido2Provisioning {
     param([Parameter(Mandatory)]$User, [hashtable]$Options = @{})
 
-    $serial = Get-RequiredOption -Options $Options -Name 'SerialNumber' -Label 'Seriennummer / interne ID'
+    $serial = Get-RequiredOption -Options $Options -Name 'SerialNumber' -Label 'Config.Serial.Fido2'
     $upn = [string]$User.UserPrincipalName
     if ($upn.Length -gt 64) {
-        throw "Der UPN ist zu lang ($($upn.Length) Zeichen). Für FIDO2 sind maximal 64 Zeichen erlaubt."
+        throw (T 'Fido2.UpnTooLong' $upn.Length)
     }
 
     Import-RequiredModule -Name 'DSInternals.Passkeys' -RequiredVersion $script:Fido2ModuleVersion -SkipPublisherCheck
@@ -284,9 +280,9 @@ function Start-Fido2Provisioning {
     $before = @((Invoke-M365GraphRequest -Uri $fido2Uri)['value'] | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_['id'] })
 
     try {
-        # Objekt-ID statt UPN: nach einer UPN-Änderung (z. B. Breakglass-Account) ist die ID sofort eindeutig auflösbar.
+        # Object ID instead of UPN: after a UPN change (e.g. break-glass account) the ID resolves reliably right away.
         $registrationOptions = Get-PasskeyRegistrationOptions -UserId $User.Id -ErrorAction Stop
-        # Öffnet den Windows-Sicherheitsdialog (PIN / Berührung des Sticks).
+        # Opens the Windows Security dialog (PIN / touch of the key).
         $passkey = New-Passkey -Options $registrationOptions -DisplayName $displayName -ErrorAction Stop
         $registered = Register-Passkey -Passkey $passkey -UserId $User.Id -ErrorAction Stop
     }
@@ -296,9 +292,9 @@ function Start-Fido2Provisioning {
         while ($inner.InnerException) { $inner = $inner.InnerException }
         $text = "$details $($_.Exception.Message) $($inner.Message)"
         if ($text -like '*Fido credential policy*') {
-            throw "FIDO2 ist in der Authentifizierungsmethoden-Richtlinie des Tenants nicht aktiviert. Bitte aktivieren unter: $script:AuthMethodPolicyUrl"
+            throw (T 'Fido2.PolicyDisabled' $script:AuthMethodPolicyUrl)
         }
-        throw "FIDO2-Registrierung fehlgeschlagen: $(if ($details) { $details } else { $inner.Message })"
+        throw (T 'Fido2.Failed' $(if ($details) { $details } else { $inner.Message }))
     }
 
     $addedId = $null
@@ -311,31 +307,31 @@ function Start-Fido2Provisioning {
     }
 
     $model = if ($null -ne $registered -and $registered.PSObject.Properties['Model']) { $registered.Model } else { $null }
-    $message = "FIDO2-Passkey '$displayName' registriert für $upn" + $(if ($model) { " (Modell: $model)." } else { '.' })
+    $message = if ($model) { T 'Fido2.RegisteredWithModel' $displayName $upn $model } else { T 'Fido2.Registered' $displayName $upn }
     New-ProvisioningResult -Message $message -AddedMethodIds @($addedId)
 }
 
 function Start-FixedSecretTotpProvisioning {
     param([Parameter(Mandatory)]$User, [hashtable]$Options = @{})
 
-    $serial = Get-RequiredOption -Options $Options -Name 'SerialNumber' -Label 'Seriennummer'
-    $secret = ConvertTo-NormalizedTotpSecret -Secret (Get-RequiredOption -Options $Options -Name 'Secret' -Label 'Secret der Karte')
+    $serial = Get-RequiredOption -Options $Options -Name 'SerialNumber' -Label 'Config.Serial.Card'
+    $secret = ConvertTo-NormalizedTotpSecret -Secret (Get-RequiredOption -Options $Options -Name 'Secret' -Label 'Config.Secret')
 
     $token = New-HardwareOathTotp -User $User -SerialNumber $serial -SecretKey $secret `
-        -DisplayName "TOTP-Karte $serial" -Model 'TOTP-Karte (festes Secret)' -ReuseExistingDevice
+        -DisplayName "TOTP card $serial" -Model 'TOTP card (fixed secret)' -ReuseExistingDevice
     $secret = $null
 
-    New-ProvisioningResult -Message "TOTP-Karte '$serial' (festes Secret) zugewiesen und aktiviert für $($User.UserPrincipalName)." -AddedMethodIds @($token.MethodId)
+    New-ProvisioningResult -Message (T 'Prov.FixedTotp.Done' $serial $User.UserPrincipalName) -AddedMethodIds @($token.MethodId)
 }
 
 function Start-ProgrammableTotpProvisioning {
     param([Parameter(Mandatory)]$User, [hashtable]$Options = @{})
 
-    $serial = Get-RequiredOption -Options $Options -Name 'SerialNumber' -Label 'Seriennummer'
+    $serial = Get-RequiredOption -Options $Options -Name 'SerialNumber' -Label 'Config.Serial.Card'
     $secret = New-TotpSecret
 
     $token = New-HardwareOathTotp -User $User -SerialNumber $serial -SecretKey $secret `
-        -DisplayName "TOTP-Karte $serial" -Model 'TOTP Generic'
+        -DisplayName "TOTP card $serial" -Model 'TOTP Generic'
 
     $account = [string]$User.UserPrincipalName
     $issuer = [uri]::EscapeDataString($script:OathIssuer)
@@ -344,7 +340,7 @@ function Start-ProgrammableTotpProvisioning {
     $qrPng = $null
     $qrWarning = ''
     try { $qrPng = New-TotpQrCodePng -Text $otpUri }
-    catch { $qrWarning = " QR-Code konnte nicht erzeugt werden: $($_.Exception.Message)" }
+    catch { $qrWarning = ' ' + (T 'Prov.QrFailed' $_.Exception.Message) }
 
     $setup = [pscustomobject]@{
         UserPrincipalName = $account
@@ -354,13 +350,13 @@ function Start-ProgrammableTotpProvisioning {
         QrCodePng         = $qrPng
     }
 
-    New-ProvisioningResult -Message "Programmierbare TOTP-Karte '$serial' zugewiesen und aktiviert für $account. Karte jetzt programmieren.$qrWarning" `
+    New-ProvisioningResult -Message ((T 'Prov.ProgTotp.Done' $serial $account) + $qrWarning) `
         -TotpSetup $setup -AddedMethodIds @($token.MethodId)
 }
 
 function New-FakeMfaToken {
-    # TOTP mit zufälligem Secret, das nach der Aktivierung verworfen wird:
-    # Bei der Anmeldung wird eine MFA-Methode abgefragt, die niemand bedienen kann.
+    # TOTP with a random secret that is discarded after activation:
+    # at sign-in, an MFA method is requested that nobody can satisfy.
     param([Parameter(Mandatory)]$User)
     $serial = 'FAKE-' + (New-RandomBase32 -Length 16)
     $token = New-HardwareOathTotp -User $User -SerialNumber $serial -SecretKey (New-TotpSecret) `
@@ -369,7 +365,7 @@ function New-FakeMfaToken {
 }
 
 function Remove-HardwareOathToken {
-    # Entfernt einen Token vom Benutzer und aus dem Geräteinventar.
+    # Removes a token from the user and from the device inventory.
     param([Parameter(Mandatory)]$User, [Parameter(Mandatory)]$Token)
     $userPart = [uri]::EscapeDataString($User.Id)
     Invoke-M365GraphRequest -Method DELETE -Uri "beta/users/$userPart/authentication/hardwareOathMethods/$([uri]::EscapeDataString($Token.MethodId))" | Out-Null
@@ -380,7 +376,7 @@ function Start-FakeMfaProvisioning {
     param([Parameter(Mandatory)]$User, [hashtable]$Options = @{})
 
     $token = New-FakeMfaToken -User $User
-    New-ProvisioningResult -Message "Fake-MFA (Seriennummer $($token.SerialNumber)) registriert für $($User.UserPrincipalName). Das Secret wurde verworfen." `
+    New-ProvisioningResult -Message (T 'Prov.Fake.Done' $token.SerialNumber $User.UserPrincipalName) `
         -AddedMethodIds @($token.MethodId)
 }
 
@@ -390,7 +386,7 @@ function Start-TemporaryAccessPassProvisioning {
     $userPart = [uri]::EscapeDataString($User.Id)
     $baseUri = "v1.0/users/$userPart/authentication/temporaryAccessPassMethods"
 
-    # Ein Benutzer kann nur einen TAP haben -> vorhandene vorher entfernen (Rückfrage erfolgt in der GUI).
+    # A user can only have one TAP -> remove existing ones first (the GUI asks for confirmation).
     $existing = @((Invoke-M365GraphRequest -Uri $baseUri)['value'] | Where-Object { $null -ne $_ })
     $removedIds = @()
     foreach ($tap in $existing) {
@@ -398,7 +394,7 @@ function Start-TemporaryAccessPassProvisioning {
         $removedIds += [string]$tap['id']
     }
 
-    # Ohne startDateTime ist der TAP sofort gültig.
+    # Without startDateTime, the TAP is valid immediately.
     $response = Invoke-M365GraphRequest -Method POST -Uri $baseUri -Body @{
         lifetimeInMinutes = $script:TapLifetimeMinutes
         isUsableOnce      = $false
@@ -417,21 +413,20 @@ function Start-TemporaryAccessPassProvisioning {
         IsUsableOnce      = [bool]$response['isUsableOnce']
     }
 
-    $message = 'Temporary Access Pass erstellt für {0} (gültig {1:dd.MM.yyyy HH:mm} - {2:HH:mm}{3}).' -f
-        $User.UserPrincipalName, $tapInfo.ValidFrom, $tapInfo.ValidUntil,
-        $(if ($existing.Count) { ', vorheriger TAP ersetzt' } else { '' })
+    $message = T 'Prov.Tap.Done' $User.UserPrincipalName $tapInfo.ValidFrom.ToString((T 'Format.DateTime')) $tapInfo.ValidUntil.ToString((T 'Format.DateTime'))
+    if ($existing.Count) { $message += ' ' + (T 'Prov.Tap.Replaced') }
     New-ProvisioningResult -Message $message -TemporaryAccessPass $tapInfo `
         -AddedMethodIds @([string]$response['id']) -RemovedMethodIds $removedIds
 }
 
 #endregion
 
-#region Breakglass-Account
+#region Break-glass account
 
 $script:GlobalAdminRoleId = '62e90394-69f5-4237-9190-012177145e10'
 
 function New-SecureRandomPassword {
-    # Kryptografisch zufälliges Kennwort; wird nie angezeigt, protokolliert oder gespeichert.
+    # Cryptographically random password; never displayed, logged or stored.
     param([int]$Length = 255)
     $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{}?'
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
@@ -446,7 +441,7 @@ function New-SecureRandomPassword {
 }
 
 function Invoke-WithRetry {
-    # Neu angelegte Objekte sind in Graph erst nach einigen Sekunden überall verfügbar.
+    # Newly created objects are only available everywhere in Graph after a few seconds.
     param(
         [Parameter(Mandatory)][scriptblock]$Action,
         [Parameter(Mandatory)][string]$Description,
@@ -461,7 +456,7 @@ function Invoke-WithRetry {
         }
         catch {
             if ($attempt -ge $Attempts) { throw }
-            & $OnProgress "$Description noch nicht möglich (Replikation), neuer Versuch $($attempt + 1)/$Attempts ..."
+            & $OnProgress (T 'BG.Retry' (T $Description) ($attempt + 1) $Attempts)
             & $Wait $DelayMilliseconds
         }
     }
@@ -470,17 +465,17 @@ function Invoke-WithRetry {
 function New-M365BreakGlassAccount {
     <#
     .SYNOPSIS
-        Legt einen Breakglass-Account an und sichert ihn mit Fake-MFA bzw. FIDO2 ab.
+        Creates a break-glass account and secures it with fake MFA or FIDO2.
     .DESCRIPTION
-        1. Benutzer mit zufälligem, unbekanntem Kennwort (255 Zeichen) anlegen
-        2. UPN, Mail-Nickname und Anzeigename auf die Objekt-ID umstellen (UPN max. 64 Zeichen für FIDO2)
-        3. Optional Global Administrator zuweisen
-        4. Fake-MFA registrieren, damit der Account sofort abgesichert ist
-        5. Optional FIDO2-Stick registrieren und danach das Fake-MFA wieder entfernen
+        1. Create the user with a random, unknown password (255 characters)
+        2. Change UPN, mail nickname and display name to the object ID (UPN max. 64 characters for FIDO2)
+        3. Optionally assign Global Administrator
+        4. Register fake MFA so the account is protected immediately
+        5. Optionally register a FIDO2 key and then remove the fake MFA again
     .PARAMETER OnProgress
-        Wird mit Statusmeldungen aufgerufen (z. B. für das GUI-Protokoll).
+        Called with status messages (e.g. for the GUI log).
     .PARAMETER Wait
-        Wird mit Millisekunden aufgerufen, um auf Graph-Replikation zu warten (GUI: ohne Einfrieren).
+        Called with milliseconds to wait for Graph replication (GUI: without freezing).
     #>
     [CmdletBinding()]
     param(
@@ -493,11 +488,11 @@ function New-M365BreakGlassAccount {
 
     $retry = @{ OnProgress = $OnProgress; Wait = $Wait }
     $maxLocalPart = 64 - 1 - $Domain.Length
-    if ($maxLocalPart -lt 8) { throw "Die Domain '$Domain' ist zu lang für einen FIDO2-tauglichen UPN (max. 64 Zeichen)." }
+    if ($maxLocalPart -lt 8) { throw (T 'BG.DomainTooLong' $Domain) }
 
-    # 1. Benutzer anlegen
+    # 1. Create user
     $tempName = [guid]::NewGuid().ToString('N').Substring(0, [Math]::Min(32, $maxLocalPart))
-    & $OnProgress "Lege Breakglass-Account in $Domain an ..."
+    & $OnProgress (T 'BG.Creating' $Domain)
     $created = Invoke-M365GraphRequest -Method POST -Uri 'v1.0/users' -Body @{
         accountEnabled    = $true
         displayName       = "Break Glass Account $tempName"
@@ -507,7 +502,7 @@ function New-M365BreakGlassAccount {
     }
     $userId = [string]$created['id']
 
-    # 2. Auf Objekt-ID umbenennen
+    # 2. Rename to object ID
     $localPart = $userId.Substring(0, [Math]::Min($userId.Length, $maxLocalPart))
     $user = [pscustomobject]@{
         Id                = $userId
@@ -516,14 +511,14 @@ function New-M365BreakGlassAccount {
         Mail              = $null
         AccountEnabled    = $true
     }
-    Invoke-WithRetry @retry -Description 'Umbenennen' -Action {
+    Invoke-WithRetry @retry -Description 'BG.Step.Rename' -Action {
         Invoke-M365GraphRequest -Method PATCH -Uri "v1.0/users/$userId" -Body @{
             userPrincipalName = $user.UserPrincipalName
             mailNickname      = $localPart
             displayName       = $user.DisplayName
         } | Out-Null
     }
-    & $OnProgress "Account angelegt: $($user.UserPrincipalName)"
+    & $OnProgress (T 'BG.Created' $user.UserPrincipalName)
 
     $result = [pscustomobject]@{
         User                = $user
@@ -535,9 +530,9 @@ function New-M365BreakGlassAccount {
 
     # 3. Global Administrator
     if ($AssignGlobalAdmin) {
-        & $OnProgress 'Weise die Rolle Global Administrator zu ...'
+        & $OnProgress (T 'BG.AssigningGlobalAdmin')
         try {
-            Invoke-WithRetry @retry -Description 'Rollenzuweisung' -Action {
+            Invoke-WithRetry @retry -Description 'BG.Step.RoleAssignment' -Action {
                 Invoke-M365GraphRequest -Method POST -Uri 'v1.0/roleManagement/directory/roleAssignments' -Body @{
                     principalId      = $userId
                     roleDefinitionId = $script:GlobalAdminRoleId
@@ -545,50 +540,50 @@ function New-M365BreakGlassAccount {
                 } | Out-Null
             }
             $result.GlobalAdminAssigned = $true
-            & $OnProgress 'Global Administrator zugewiesen.'
+            & $OnProgress (T 'BG.GlobalAdminAssigned')
         }
         catch {
-            $result.Warnings.Add("Global Administrator konnte nicht zugewiesen werden: $($_.Exception.Message)")
+            $result.Warnings.Add((T 'BG.GlobalAdminFailed' $_.Exception.Message))
         }
     }
 
-    # 4. Fake-MFA als Absicherung, bis FIDO2 registriert ist
-    & $OnProgress 'Registriere Fake-MFA zur Absicherung ...'
+    # 4. Fake MFA as protection until FIDO2 is registered
+    & $OnProgress (T 'BG.RegisteringFake')
     $fakeToken = $null
     try {
-        $fakeToken = Invoke-WithRetry @retry -Description 'Fake-MFA' -Action { New-FakeMfaToken -User $user }
+        $fakeToken = Invoke-WithRetry @retry -Description 'BG.Step.FakeMfa' -Action { New-FakeMfaToken -User $user }
         $result.FakeMfaActive = $true
-        & $OnProgress "Fake-MFA registriert ($($fakeToken.SerialNumber))."
+        & $OnProgress (T 'BG.FakeRegistered' $fakeToken.SerialNumber)
     }
     catch {
-        $result.Warnings.Add("Fake-MFA konnte nicht registriert werden: $($_.Exception.Message)")
+        $result.Warnings.Add((T 'BG.FakeFailed' $_.Exception.Message))
     }
 
-    # 5. FIDO2-Stick registrieren, danach Fake-MFA entfernen
+    # 5. Register FIDO2 key, then remove fake MFA
     if (-not [string]::IsNullOrWhiteSpace($Fido2SerialNumber)) {
         try {
-            # Warten, bis die Authentifizierungsmethoden des neuen Benutzers abrufbar sind.
-            Invoke-WithRetry @retry -Description 'FIDO2-Vorbereitung' -Action {
+            # Wait until the authentication methods of the new user can be retrieved.
+            Invoke-WithRetry @retry -Description 'BG.Step.Fido2Prep' -Action {
                 Invoke-M365GraphRequest -Uri "beta/users/$userId/authentication/fido2Methods" | Out-Null
             }
-            & $OnProgress 'FIDO2: Bitte PIN eingeben und den Stick berühren, sobald Windows danach fragt.'
+            & $OnProgress (T 'Fido2.Prompt')
             $fido = Start-Fido2Provisioning -User $user -Options @{ SerialNumber = $Fido2SerialNumber }
             $result.Fido2Registered = $true
             & $OnProgress $fido.Message
 
             if ($fakeToken) {
-                & $OnProgress 'Entferne Fake-MFA, da FIDO2 jetzt registriert ist ...'
+                & $OnProgress (T 'BG.RemovingFake')
                 try {
                     Remove-HardwareOathToken -User $user -Token $fakeToken
                     $result.FakeMfaActive = $false
                 }
                 catch {
-                    $result.Warnings.Add("Fake-MFA konnte nicht entfernt werden: $($_.Exception.Message)")
+                    $result.Warnings.Add((T 'BG.FakeRemoveFailed' $_.Exception.Message))
                 }
             }
         }
         catch {
-            $result.Warnings.Add("FIDO2-Registrierung fehlgeschlagen - der Account bleibt mit Fake-MFA abgesichert: $($_.Exception.Message)")
+            $result.Warnings.Add((T 'BG.Fido2Failed' $_.Exception.Message))
         }
     }
 
@@ -600,31 +595,25 @@ function New-M365BreakGlassAccount {
 function Invoke-MfaProvisioning {
     <#
     .SYNOPSIS
-        Richtet die gewählte MFA-Methode für einen Benutzer ein.
+        Sets up the selected MFA method for a user.
     .PARAMETER Options
-        Zusätzliche Eingaben aus der GUI: SerialNumber, Secret.
+        Additional input from the GUI: SerialNumber, Secret.
     .OUTPUTS
-        Ergebnisobjekt aus New-ProvisioningResult.
+        Result object from New-ProvisioningResult.
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][ValidateSet(
-            'FIDO2 Security Key',
-            'TOTP-Karte mit festem Secret',
-            'Programmierbare TOTP-Karte',
-            'Temporary Access Pass (2 Stunden)',
-            'Fake-MFA (TOTP ohne Hinterlegung)'
-        )][string]$Method,
+        [Parameter(Mandatory)][ValidateSet('Fido2', 'FixedTotp', 'ProgrammableTotp', 'Tap', 'FakeMfa')][string]$Method,
         [Parameter(Mandatory)]$User,
         [hashtable]$Options = @{}
     )
     $params = @{ User = $User; Options = $Options }
     switch ($Method) {
-        $script:MethodFido2     { Start-Fido2Provisioning @params }
-        $script:MethodFixedTotp { Start-FixedSecretTotpProvisioning @params }
-        $script:MethodProgTotp  { Start-ProgrammableTotpProvisioning @params }
-        $script:MethodTap       { Start-TemporaryAccessPassProvisioning @params }
-        $script:MethodFakeMfa   { Start-FakeMfaProvisioning @params }
+        'Fido2'            { Start-Fido2Provisioning @params }
+        'FixedTotp'        { Start-FixedSecretTotpProvisioning @params }
+        'ProgrammableTotp' { Start-ProgrammableTotpProvisioning @params }
+        'Tap'              { Start-TemporaryAccessPassProvisioning @params }
+        'FakeMfa'          { Start-FakeMfaProvisioning @params }
     }
 }
 

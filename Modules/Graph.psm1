@@ -1,11 +1,11 @@
 ﻿<#
 .SYNOPSIS
-    Microsoft-Graph-Anbindung des M365 MFA Administration Tools.
+    Microsoft Graph integration of the M365 MFA Administration Tool.
 
 .DESCRIPTION
-    Modulverwaltung, Anmeldung, Benutzersuche sowie Lesen und Löschen von
-    Authentifizierungsmethoden. Alle Graph-Aufrufe laufen über Invoke-M365GraphRequest
-    (Invoke-MgGraphRequest), daher wird nur Microsoft.Graph.Authentication benötigt.
+    Module management, sign-in, user search, and reading and deleting
+    authentication methods. All Graph calls go through Invoke-M365GraphRequest
+    (Invoke-MgGraphRequest), so only Microsoft.Graph.Authentication is required.
 #>
 
 Set-StrictMode -Version Latest
@@ -14,17 +14,17 @@ $script:GraphScopes = @(
     'User.Read.All'
     'UserAuthenticationMethod.Read.All'
     'UserAuthenticationMethod.ReadWrite.All'
-    'Policy.ReadWrite.AuthenticationMethod'   # Hardware-OATH-Token im Verzeichnis anlegen/löschen
-    'RoleManagement.Read.Directory'           # Administrative Rollen des Benutzers anzeigen
+    'Policy.ReadWrite.AuthenticationMethod'   # Create/delete hardware OATH tokens in the directory
+    'RoleManagement.Read.Directory'           # Show the user's administrative roles
 )
 
-$script:RoleDefinitionNames = $null   # Cache: Rollen-ID -> Anzeigename
+$script:RoleDefinitionNames = $null   # Cache: role ID -> display name
 
-#region Modulverwaltung
+#region Module management
 
 function Add-UserModulePath {
-    # Install-Module -Scope CurrentUser installiert nach <Dokumente>\WindowsPowerShell\Modules.
-    # Wird powershell.exe z. B. aus VS Code oder pwsh 7 gestartet, fehlt dieser Pfad teils in PSModulePath.
+    # Install-Module -Scope CurrentUser installs to <Documents>\WindowsPowerShell\Modules.
+    # When powershell.exe is started e.g. from VS Code or pwsh 7, this path is sometimes missing from PSModulePath.
     $userModulePath = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'WindowsPowerShell\Modules'
     $paths = @($env:PSModulePath -split ';' | Where-Object { $_ })
     if ($paths -notcontains $userModulePath) {
@@ -33,9 +33,9 @@ function Add-UserModulePath {
 }
 
 function Get-CompatibleAuthenticationVersion {
-    # DSInternals.Passkeys (FIDO2) lädt Microsoft.Graph.Identity.SignIns, das eine exakte Version von
-    # Microsoft.Graph.Authentication voraussetzt. Ist bereits eine andere Version geladen, schlägt der Import fehl.
-    # Daher die Authentication-Version wählen, die zur neuesten installierten SignIns-Version passt.
+    # DSInternals.Passkeys (FIDO2) loads Microsoft.Graph.Identity.SignIns, which requires an exact version of
+    # Microsoft.Graph.Authentication. If a different version is already loaded, the import fails.
+    # Therefore pick the Authentication version that matches the newest installed SignIns version.
     $signIns = Get-Module -ListAvailable -Name 'Microsoft.Graph.Identity.SignIns' |
         Sort-Object Version -Descending |
         Select-Object -First 1
@@ -55,22 +55,22 @@ function Get-CompatibleAuthenticationVersion {
 function Assert-GraphModules {
     <#
     .SYNOPSIS
-        Stellt sicher, dass Microsoft.Graph.Authentication installiert und geladen ist.
+        Ensures that Microsoft.Graph.Authentication is installed and loaded.
     #>
     $moduleName = 'Microsoft.Graph.Authentication'
     Add-UserModulePath
     if (Get-Module -Name $moduleName) { return }
 
     if (-not (Get-Module -ListAvailable -Name $moduleName)) {
-        Write-Host "Das Modul '$moduleName' fehlt und wird für den aktuellen Benutzer installiert ..." -ForegroundColor Cyan
+        Write-Host (T 'Module.Installing' $moduleName) -ForegroundColor Cyan
         try {
             Install-Module -Name $moduleName -Repository PSGallery -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
         }
         catch {
-            throw "Installation von '$moduleName' fehlgeschlagen: $($_.Exception.Message)"
+            throw (T 'Module.InstallFailed' $moduleName $_.Exception.Message)
         }
         if (-not (Get-Module -ListAvailable -Name $moduleName)) {
-            throw "Das Modul '$moduleName' wurde installiert, ist in dieser PowerShell-Sitzung aber nicht auffindbar."
+            throw (T 'Module.NotFoundAfterInstall' $moduleName)
         }
     }
 
@@ -80,23 +80,23 @@ function Assert-GraphModules {
 
     try {
         Import-Module @importParams
-        Write-Host "'$moduleName' ist geladen." -ForegroundColor Green
+        Write-Host (T 'Module.Loaded' $moduleName) -ForegroundColor Green
     }
     catch {
-        throw "Das Modul '$moduleName' konnte nicht geladen werden: $($_.Exception.Message)"
+        throw (T 'Module.LoadFailed' $moduleName $_.Exception.Message)
     }
 }
 
 #endregion
 
-#region Verbindung
+#region Connection
 
 function Test-M365GraphConnection {
     <#
     .SYNOPSIS
-        Gibt $true zurück, wenn eine angemeldete Graph-Sitzung besteht.
+        Returns $true if a signed-in Graph session exists.
     #>
-    # Vor der ersten Anmeldung ist das Graph-Modul ggf. noch nicht geladen.
+    # Before the first sign-in, the Graph module may not be loaded yet.
     if (-not (Get-Command -Name Get-MgContext -ErrorAction SilentlyContinue)) { return $false }
     $context = Get-MgContext -ErrorAction SilentlyContinue
     return ($null -ne $context -and -not [string]::IsNullOrWhiteSpace($context.Account))
@@ -105,7 +105,7 @@ function Test-M365GraphConnection {
 function Connect-M365Graph {
     <#
     .SYNOPSIS
-        Meldet interaktiv an Microsoft Graph an und gibt Konto und Tenant zurück.
+        Signs in to Microsoft Graph interactively and returns the account and tenant.
     #>
     Assert-GraphModules
 
@@ -113,12 +113,12 @@ function Connect-M365Graph {
         Connect-MgGraph -Scopes $script:GraphScopes -NoWelcome -ErrorAction Stop | Out-Null
     }
     catch {
-        throw "Anmeldung an Microsoft Graph fehlgeschlagen: $($_.Exception.Message)"
+        throw (T 'Graph.ConnectFailed' $_.Exception.Message)
     }
 
     $context = Get-MgContext
     if ($null -eq $context) {
-        throw 'Anmeldung an Microsoft Graph fehlgeschlagen: Kein Kontext vorhanden.'
+        throw (T 'Graph.ConnectFailed' (T 'Graph.NoContext'))
     }
 
     [pscustomobject]@{
@@ -131,9 +131,9 @@ function Connect-M365Graph {
 function Request-M365GraphScopes {
     <#
     .SYNOPSIS
-        Fordert zusätzliche Berechtigungen an (erneute Anmeldung nur, wenn welche fehlen).
+        Requests additional permissions (signs in again only if some are missing).
     .OUTPUTS
-        Konto und Tenant der (ggf. neuen) Sitzung.
+        Account and tenant of the (possibly new) session.
     #>
     param([Parameter(Mandatory)][string[]]$Scopes)
 
@@ -144,7 +144,7 @@ function Request-M365GraphScopes {
             Connect-MgGraph -Scopes (@($script:GraphScopes) + $Scopes | Select-Object -Unique) -NoWelcome -ErrorAction Stop | Out-Null
         }
         catch {
-            throw "Zusätzliche Berechtigungen ($($missing -join ', ')) wurden nicht erteilt: $($_.Exception.Message)"
+            throw (T 'Graph.ScopesDenied' ($missing -join ', ') $_.Exception.Message)
         }
         $context = Get-MgContext
     }
@@ -159,7 +159,7 @@ function Request-M365GraphScopes {
 function Disconnect-M365Graph {
     <#
     .SYNOPSIS
-        Trennt die Graph-Sitzung, falls eine besteht.
+        Disconnects the Graph session, if one exists.
     #>
     if (Test-M365GraphConnection) {
         Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
@@ -169,12 +169,12 @@ function Disconnect-M365Graph {
 
 #endregion
 
-#region Graph-Anfragen
+#region Graph requests
 
 function Get-GraphErrorMessage {
     param([Parameter(Mandatory)]$ErrorRecord)
 
-    # Das Graph-SDK verpackt Fehler gern in AggregateExceptions ("Mindestens ein Fehler ist aufgetreten").
+    # The Graph SDK often wraps errors in AggregateExceptions ("One or more errors occurred").
     $exception = $ErrorRecord.Exception
     while ($exception.InnerException) { $exception = $exception.InnerException }
     $message = $exception.Message
@@ -194,10 +194,10 @@ function Get-GraphErrorMessage {
 function Invoke-M365GraphRequest {
     <#
     .SYNOPSIS
-        Wrapper um Invoke-MgGraphRequest mit JSON-Body und lesbaren Fehlermeldungen.
+        Wrapper around Invoke-MgGraphRequest with a JSON body and readable error messages.
     .NOTES
-        Bewusst nicht "Invoke-GraphRequest" genannt: Unter diesem Namen definiert das Graph-SDK
-        einen Alias auf Invoke-MgGraphRequest, und Aliase haben Vorrang vor Funktionen.
+        Intentionally not named "Invoke-GraphRequest": the Graph SDK defines an alias with that
+        name for Invoke-MgGraphRequest, and aliases take precedence over functions.
     #>
     param(
         [Parameter(Mandatory)][string]$Uri,
@@ -216,14 +216,14 @@ function Invoke-M365GraphRequest {
         Invoke-MgGraphRequest @params
     }
     catch {
-        throw "Graph-Anfrage fehlgeschlagen ($Method $($Uri -replace '\?.*$', '')): $(Get-GraphErrorMessage $_)"
+        throw (T 'Graph.RequestFailed' $Method ($Uri -replace '\?.*$', '') (Get-GraphErrorMessage $_))
     }
 }
 
 function ConvertTo-LocalDate {
     <#
     .SYNOPSIS
-        Wandelt einen Graph-Zeitstempel (String oder DateTime) in lokale Zeit um.
+        Converts a Graph timestamp (string or DateTime) to local time.
     #>
     param($Value)
     if ($null -eq $Value -or "$Value" -eq '') { return $null }
@@ -238,12 +238,12 @@ function ConvertTo-LocalDate {
 
 #endregion
 
-#region Benutzer und Domains
+#region Users and domains
 
 function Find-M365User {
     <#
     .SYNOPSIS
-        Sucht Benutzer nach Objekt-ID oder Namensanfang (Anzeigename, Vorname, Nachname, UPN, E-Mail).
+        Finds users by object ID or name prefix (display name, given name, surname, UPN, email).
     #>
     [CmdletBinding()]
     param(
@@ -252,7 +252,7 @@ function Find-M365User {
     )
 
     if (-not (Test-M365GraphConnection)) {
-        throw 'Keine Verbindung zu Microsoft Graph. Bitte zuerst anmelden.'
+        throw (T 'Graph.NotConnected')
     }
 
     $term = $SearchTerm.Trim()
@@ -286,7 +286,7 @@ function Find-M365User {
 function Get-M365VerifiedDomains {
     <#
     .SYNOPSIS
-        Liefert die verifizierten Domains des Tenants, Standarddomain zuerst.
+        Returns the verified domains of the tenant, default domain first.
     #>
     $response = Invoke-M365GraphRequest -Uri 'v1.0/domains?$select=id,isVerified,isDefault'
     @($response['value']) |
@@ -297,44 +297,45 @@ function Get-M365VerifiedDomains {
 
 #endregion
 
-#region Authentifizierungsmethoden
+#region Authentication methods
 
-# Graph-Typ -> Anzeigename, URL-Segment zum Löschen ($null = nicht löschbar) und Sicherheitsstufe:
-#   PhishingResistant / Strong = vollwertiges MFA, Weak = veraltet/unsicher,
-#   Temporary = nur übergangsweise (TAP), None = kein MFA-Faktor
+# Graph type -> display name key, URL segment for deletion ($null = cannot be deleted) and strength:
+#   PhishingResistant / Strong = full MFA, Weak = outdated/insecure,
+#   Temporary = interim only (TAP), None = not an MFA factor
 $script:AuthMethodTypes = @{
-    '#microsoft.graph.fido2AuthenticationMethod'                              = @{ Name = 'FIDO2 Security Key / Passkey';          Segment = 'fido2Methods';                              Strength = 'PhishingResistant' }
-    '#microsoft.graph.windowsHelloForBusinessAuthenticationMethod'            = @{ Name = 'Windows Hello for Business';            Segment = 'windowsHelloForBusinessMethods';            Strength = 'PhishingResistant' }
-    '#microsoft.graph.platformCredentialAuthenticationMethod'                 = @{ Name = 'Platform Credential (macOS)';           Segment = 'platformCredentialMethods';                 Strength = 'PhishingResistant' }
-    '#microsoft.graph.microsoftAuthenticatorAuthenticationMethod'             = @{ Name = 'Microsoft Authenticator';               Segment = 'microsoftAuthenticatorMethods';             Strength = 'Strong' }
-    '#microsoft.graph.passwordlessMicrosoftAuthenticatorAuthenticationMethod' = @{ Name = 'Authenticator (kennwortlos, veraltet)'; Segment = 'passwordlessMicrosoftAuthenticatorMethods'; Strength = 'Strong' }
-    '#microsoft.graph.softwareOathAuthenticationMethod'                       = @{ Name = 'Software-OATH (TOTP)';                  Segment = 'softwareOathMethods';                       Strength = 'Strong' }
-    '#microsoft.graph.hardwareOathAuthenticationMethod'                       = @{ Name = 'Hardware-OATH (TOTP-Token/-Karte)';     Segment = 'hardwareOathMethods';                       Strength = 'Strong' }
-    '#microsoft.graph.externalAuthenticationMethod'                           = @{ Name = 'Externe Authentifizierungsmethode';     Segment = 'externalAuthenticationMethods';             Strength = 'Strong' }
-    '#microsoft.graph.phoneAuthenticationMethod'                              = @{ Name = 'Telefon (SMS/Anruf)';                   Segment = 'phoneMethods';                              Strength = 'Weak' }
-    '#microsoft.graph.qrCodePinAuthenticationMethod'                          = @{ Name = 'QR-Code + PIN';                         Segment = 'qrCodePinMethod';                           Strength = 'Weak' }
-    '#microsoft.graph.temporaryAccessPassAuthenticationMethod'                = @{ Name = 'Befristeter Zugriffspass (TAP)';        Segment = 'temporaryAccessPassMethods';                Strength = 'Temporary' }
-    '#microsoft.graph.emailAuthenticationMethod'                              = @{ Name = 'E-Mail (SSPR)';                         Segment = 'emailMethods';                              Strength = 'None' }
-    '#microsoft.graph.passwordAuthenticationMethod'                           = @{ Name = 'Kennwort';                              Segment = $null;                                       Strength = 'None' }
+    '#microsoft.graph.fido2AuthenticationMethod'                              = @{ Name = 'MethodType.Fido2';                      Segment = 'fido2Methods';                              Strength = 'PhishingResistant' }
+    '#microsoft.graph.windowsHelloForBusinessAuthenticationMethod'            = @{ Name = 'MethodType.WindowsHello';               Segment = 'windowsHelloForBusinessMethods';            Strength = 'PhishingResistant' }
+    '#microsoft.graph.platformCredentialAuthenticationMethod'                 = @{ Name = 'MethodType.PlatformCredential';         Segment = 'platformCredentialMethods';                 Strength = 'PhishingResistant' }
+    '#microsoft.graph.microsoftAuthenticatorAuthenticationMethod'             = @{ Name = 'MethodType.Authenticator';              Segment = 'microsoftAuthenticatorMethods';             Strength = 'Strong' }
+    '#microsoft.graph.passwordlessMicrosoftAuthenticatorAuthenticationMethod' = @{ Name = 'MethodType.PasswordlessAuthenticator';  Segment = 'passwordlessMicrosoftAuthenticatorMethods'; Strength = 'Strong' }
+    '#microsoft.graph.softwareOathAuthenticationMethod'                       = @{ Name = 'MethodType.SoftwareOath';               Segment = 'softwareOathMethods';                       Strength = 'Strong' }
+    '#microsoft.graph.hardwareOathAuthenticationMethod'                       = @{ Name = 'MethodType.HardwareOath';               Segment = 'hardwareOathMethods';                       Strength = 'Strong' }
+    '#microsoft.graph.externalAuthenticationMethod'                           = @{ Name = 'MethodType.External';                   Segment = 'externalAuthenticationMethods';             Strength = 'Strong' }
+    '#microsoft.graph.phoneAuthenticationMethod'                              = @{ Name = 'MethodType.Phone';                      Segment = 'phoneMethods';                              Strength = 'Weak' }
+    '#microsoft.graph.qrCodePinAuthenticationMethod'                          = @{ Name = 'MethodType.QrCodePin';                  Segment = 'qrCodePinMethod';                           Strength = 'Weak' }
+    '#microsoft.graph.temporaryAccessPassAuthenticationMethod'                = @{ Name = 'MethodType.Tap';                        Segment = 'temporaryAccessPassMethods';                Strength = 'Temporary' }
+    '#microsoft.graph.emailAuthenticationMethod'                              = @{ Name = 'MethodType.Email';                      Segment = 'emailMethods';                              Strength = 'None' }
+    '#microsoft.graph.passwordAuthenticationMethod'                           = @{ Name = 'MethodType.Password';                   Segment = $null;                                       Strength = 'None' }
 }
 
-$script:PreferredMethodNames = @{
-    'push'                 = 'Microsoft Authenticator (Push)'
-    'oath'                 = 'OATH-Code (Software/Hardware)'
-    'voiceMobile'          = 'Anruf (Mobiltelefon)'
-    'voiceAlternateMobile' = 'Anruf (alternatives Mobiltelefon)'
-    'voiceOffice'          = 'Anruf (Bürotelefon)'
-    'sms'                  = 'SMS'
-    'none'                 = 'Keine'
+# Preferred MFA method according to Graph -> text key
+$script:PreferredMethodKeys = @{
+    'push'                 = 'Preferred.Push'
+    'oath'                 = 'Preferred.Oath'
+    'voiceMobile'          = 'Preferred.VoiceMobile'
+    'voiceAlternateMobile' = 'Preferred.VoiceAlternateMobile'
+    'voiceOffice'          = 'Preferred.VoiceOffice'
+    'sms'                  = 'Preferred.Sms'
+    'none'                 = 'Preferred.None'
 }
 
 function Format-GraphValue {
     param($Value)
     if ($null -eq $Value -or "$Value" -eq '') { return '-' }
-    if ($Value -is [bool]) { return $(if ($Value) { 'Ja' } else { 'Nein' }) }
+    if ($Value -is [bool]) { return $(if ($Value) { T 'Common.Yes' } else { T 'Common.No' }) }
     if ($Value -is [datetime] -or "$Value" -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}') {
         $date = ConvertTo-LocalDate $Value
-        if ($date) { return $date.ToString('dd.MM.yyyy HH:mm:ss') }
+        if ($date) { return $date.ToString((T 'Format.DateTimeSeconds')) }
     }
     return "$Value"
 }
@@ -361,48 +362,48 @@ function Get-MethodSummary {
 
     $parts = switch ($Type) {
         '#microsoft.graph.fido2AuthenticationMethod' {
-            "Modell: $(Format-GraphValue $Raw['model'])"
-            "Attestierung: $(Format-GraphValue $Raw['attestationLevel'])"
-            "AAGUID: $(Format-GraphValue $Raw['aaGuid'])"
+            "$(T 'Summary.Model'): $(Format-GraphValue $Raw['model'])"
+            "$(T 'Summary.Attestation'): $(Format-GraphValue $Raw['attestationLevel'])"
+            "$(T 'Summary.Aaguid'): $(Format-GraphValue $Raw['aaGuid'])"
         }
         '#microsoft.graph.microsoftAuthenticatorAuthenticationMethod' {
-            "Gerät: $(Format-GraphValue $Raw['deviceTag'])"
-            "App-Version: $(Format-GraphValue $Raw['phoneAppVersion'])"
+            "$(T 'Summary.Device'): $(Format-GraphValue $Raw['deviceTag'])"
+            "$(T 'Summary.AppVersion'): $(Format-GraphValue $Raw['phoneAppVersion'])"
         }
         '#microsoft.graph.phoneAuthenticationMethod' {
-            "Typ: $(Format-GraphValue $Raw['phoneType'])"
-            "SMS-Anmeldung: $(Format-GraphValue $Raw['smsSignInState'])"
+            "$(T 'Summary.PhoneType'): $(Format-GraphValue $Raw['phoneType'])"
+            "$(T 'Summary.SmsSignIn'): $(Format-GraphValue $Raw['smsSignInState'])"
         }
         '#microsoft.graph.hardwareOathAuthenticationMethod' {
             $device = $Raw['device']
             if ($device -is [System.Collections.IDictionary]) {
-                "Seriennummer: $(Format-GraphValue $device['serialNumber'])"
-                "Hersteller: $(Format-GraphValue $device['manufacturer'])"
-                "Modell: $(Format-GraphValue $device['model'])"
+                "$(T 'Summary.Serial'): $(Format-GraphValue $device['serialNumber'])"
+                "$(T 'Summary.Manufacturer'): $(Format-GraphValue $device['manufacturer'])"
+                "$(T 'Summary.Model'): $(Format-GraphValue $device['model'])"
             }
         }
         '#microsoft.graph.windowsHelloForBusinessAuthenticationMethod' {
-            "Schlüsselstärke: $(Format-GraphValue $Raw['keyStrength'])"
+            "$(T 'Summary.KeyStrength'): $(Format-GraphValue $Raw['keyStrength'])"
         }
         '#microsoft.graph.platformCredentialAuthenticationMethod' {
-            "Plattform: $(Format-GraphValue $Raw['platform'])"
-            "Schlüsselstärke: $(Format-GraphValue $Raw['keyStrength'])"
+            "$(T 'Summary.Platform'): $(Format-GraphValue $Raw['platform'])"
+            "$(T 'Summary.KeyStrength'): $(Format-GraphValue $Raw['keyStrength'])"
         }
         '#microsoft.graph.temporaryAccessPassAuthenticationMethod' {
-            "Gültig ab: $(Format-GraphValue $Raw['startDateTime'])"
-            "Dauer: $(Format-GraphValue $Raw['lifetimeInMinutes']) min"
-            "Einmalig: $(Format-GraphValue $Raw['isUsableOnce'])"
-            "Nutzbar: $(Format-GraphValue $Raw['isUsable']) ($(Format-GraphValue $Raw['methodUsabilityReason']))"
+            "$(T 'Summary.ValidFrom'): $(Format-GraphValue $Raw['startDateTime'])"
+            "$(T 'Summary.Duration'): $(Format-GraphValue $Raw['lifetimeInMinutes']) min"
+            "$(T 'Summary.UsableOnce'): $(Format-GraphValue $Raw['isUsableOnce'])"
+            "$(T 'Summary.Usable'): $(Format-GraphValue $Raw['isUsable']) ($(Format-GraphValue $Raw['methodUsabilityReason']))"
         }
         '#microsoft.graph.passwordAuthenticationMethod' {
-            'Erstellt = letzte Kennwortänderung'
+            T 'Summary.PasswordCreated'
         }
     }
     return (@($parts) -join ' | ')
 }
 
 function Test-FakeMfaMethod {
-    # Vom Tool angelegte Fake-MFA-Token: Seriennummer "FAKE-..." bzw. Modell "Fake-MFA"
+    # Fake MFA tokens created by this tool: serial number "FAKE-..." or model "Fake-MFA"
     param([string]$Type, [System.Collections.IDictionary]$Raw)
     if ($Type -ne '#microsoft.graph.hardwareOathAuthenticationMethod') { return $false }
     $device = $Raw['device']
@@ -413,12 +414,12 @@ function Test-FakeMfaMethod {
 function Get-M365UserAuthMethods {
     <#
     .SYNOPSIS
-        Liest alle Authentifizierungsmethoden eines Benutzers und bereitet sie für die Anzeige auf.
+        Reads all authentication methods of a user and prepares them for display.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$UserId)
 
-    # Beta liefert mehr Methodentypen (z. B. Hardware-OATH, QR-Code) und Eigenschaften als v1.0.
+    # Beta returns more method types (e.g. hardware OATH, QR code) and properties than v1.0.
     $uri = "beta/users/$([uri]::EscapeDataString($UserId))/authentication/methods"
     $items = New-Object System.Collections.Generic.List[object]
     while ($uri) {
@@ -438,7 +439,7 @@ function Get-M365UserAuthMethods {
         [pscustomobject]@{
             Id           = [string]$raw['id']
             Type         = $type
-            TypeName     = if ($info) { $info.Name } else { $type -replace '^#microsoft\.graph\.', '' }
+            TypeName     = if ($info) { T $info.Name } else { $type -replace '^#microsoft\.graph\.', '' }
             DisplayName  = if ($displayName) { "$displayName" } else { '-' }
             Summary      = Get-MethodSummary -Type $type -Raw $raw
             Created      = ConvertTo-LocalDate $raw['createdDateTime']
@@ -454,7 +455,7 @@ function Get-M365UserAuthMethods {
 function Get-M365UserSignInPreferences {
     <#
     .SYNOPSIS
-        Liest die bevorzugte MFA-Methode und den Status der systembevorzugten MFA.
+        Reads the preferred MFA method and the status of system-preferred MFA.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$UserId)
@@ -463,8 +464,8 @@ function Get-M365UserSignInPreferences {
     $response = Invoke-M365GraphRequest -Uri $uri
     $preferred = [string]$response['userPreferredMethodForSecondaryAuthentication']
 
-    $preferredName = if ([string]::IsNullOrWhiteSpace($preferred)) { 'Nicht festgelegt' }
-                     elseif ($script:PreferredMethodNames.ContainsKey($preferred)) { $script:PreferredMethodNames[$preferred] }
+    $preferredName = if ([string]::IsNullOrWhiteSpace($preferred)) { T 'Preferred.NotSet' }
+                     elseif ($script:PreferredMethodKeys.ContainsKey($preferred)) { T $script:PreferredMethodKeys[$preferred] }
                      else { $preferred }
 
     [pscustomobject]@{
@@ -476,11 +477,11 @@ function Get-M365UserSignInPreferences {
 function Get-M365MfaAssessment {
     <#
     .SYNOPSIS
-        Bewertet die MFA-Methoden eines Benutzers als Ampel (Red/Yellow/Green) mit Empfehlungen.
+        Rates a user's MFA methods as a traffic light (Red/Yellow/Green) with recommendations.
     .PARAMETER Methods
-        Objekte aus Get-M365UserAuthMethods.
+        Objects from Get-M365UserAuthMethods.
     .PARAMETER HasAdminRoles
-        Für Administratoren werden phishing-resistente Methoden empfohlen.
+        Phishing-resistant methods are recommended for administrators.
     #>
     param(
         [object[]]$Methods = @(),
@@ -497,35 +498,35 @@ function Get-M365MfaAssessment {
 
     if ($strong.Count) {
         $level = 'Green'
-        $title = if ($phishingResistant.Count) { 'Starkes MFA (phishing-resistent)' } else { 'Starkes MFA' }
+        $title = if ($phishingResistant.Count) { T 'Mfa.Title.PhishingResistant' } else { T 'Mfa.Title.Strong' }
         if ($HasAdminRoles -and -not $phishingResistant.Count) {
-            $hints.Add('Administrator ohne phishing-resistente Methode: FIDO2-Stick, Passkey oder Windows Hello ergänzen.')
+            $hints.Add((T 'Mfa.Hint.AdminNoPhishingResistant'))
         }
-        if ($weak.Count) { $hints.Add('SMS/Anruf ist zusätzlich registriert und kann entfernt werden.') }
-        if ($fake.Count) { $hints.Add('Fake-MFA ist noch registriert und kann entfernt werden.') }
+        if ($weak.Count) { $hints.Add((T 'Mfa.Hint.RemoveWeak')) }
+        if ($fake.Count) { $hints.Add((T 'Mfa.Hint.RemoveFake')) }
     }
     elseif ($weak.Count) {
         $level = 'Yellow'
-        $title = 'Nur schwaches MFA (SMS/Anruf)'
-        $hints.Add('Authenticator-App, TOTP oder FIDO2 einrichten und SMS/Anruf anschließend entfernen.')
+        $title = T 'Mfa.Title.Weak'
+        $hints.Add((T 'Mfa.Hint.UpgradeWeak'))
     }
     elseif ($fake.Count) {
         $level = 'Yellow'
-        $title = 'Nur Fake-MFA (Anmeldung blockiert)'
-        $hints.Add('Der Benutzer kann sich nicht anmelden, bis eine echte Methode eingerichtet ist (z. B. per TAP).')
+        $title = T 'Mfa.Title.FakeOnly'
+        $hints.Add((T 'Mfa.Hint.FakeOnly'))
     }
     elseif ($temporary.Count) {
         $level = 'Yellow'
-        $title = 'Nur Temporary Access Pass'
-        $hints.Add('Benutzer sollte mit dem TAP jetzt eine dauerhafte Methode (Authenticator, FIDO2) registrieren.')
+        $title = T 'Mfa.Title.TapOnly'
+        $hints.Add((T 'Mfa.Hint.TapOnly'))
     }
     else {
         $level = 'Red'
-        $title = 'Kein MFA - nur Kennwort'
-        $hints.Add('MFA einrichten: FIDO2-Stick, TOTP-Karte oder TAP ausstellen, damit der Benutzer den Authenticator registriert.')
+        $title = T 'Mfa.Title.None'
+        $hints.Add((T 'Mfa.Hint.None'))
     }
 
-    if ($temporary.Count -and $level -eq 'Green') { $hints.Add('Aktiver TAP vorhanden - nach der Einrichtung löschen.') }
+    if ($temporary.Count -and $level -eq 'Green') { $hints.Add((T 'Mfa.Hint.RemoveTap')) }
 
     [pscustomobject]@{
         Level = $level
@@ -535,7 +536,7 @@ function Get-M365MfaAssessment {
 }
 
 function Get-M365RoleDefinitionNames {
-    # Rollen-ID -> Anzeigename, einmal pro Sitzung geladen
+    # Role ID -> display name, loaded once per session
     if (-not $script:RoleDefinitionNames) {
         $names = @{}
         $uri = 'v1.0/roleManagement/directory/roleDefinitions?$select=id,displayName'
@@ -552,7 +553,7 @@ function Get-M365RoleDefinitionNames {
 function Get-M365UserAdminRoles {
     <#
     .SYNOPSIS
-        Liefert die Verzeichnisrollen eines Benutzers: aktiv (direkt oder über Gruppen) und PIM-berechtigt.
+        Returns the directory roles of a user: active (direct or via groups) and PIM-eligible.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$UserId)
@@ -560,7 +561,7 @@ function Get-M365UserAdminRoles {
     $names = Get-M365RoleDefinitionNames
     $filter = [uri]::EscapeDataString("principalId eq '$UserId'")
 
-    # Transitive Zuweisungen enthalten auch Rollen über rollenzuweisbare Gruppen (Beta); sonst nur direkte.
+    # Transitive assignments also include roles via role-assignable groups (beta); otherwise direct ones only.
     try {
         $assignments = @((Invoke-M365GraphRequest -Uri "beta/roleManagement/directory/transitiveRoleAssignments?`$filter=$filter&`$count=true" `
             -Headers @{ ConsistencyLevel = 'eventual' })['value'])
@@ -569,7 +570,7 @@ function Get-M365UserAdminRoles {
         $assignments = @((Invoke-M365GraphRequest -Uri "v1.0/roleManagement/directory/roleAssignments?`$filter=$filter")['value'])
     }
 
-    # PIM-berechtigte Rollen (benötigt Entra ID P2; ohne Lizenz einfach überspringen)
+    # PIM-eligible roles (requires Entra ID P2; simply skipped without a license)
     $eligible = @()
     try {
         $eligible = @((Invoke-M365GraphRequest -Uri "v1.0/roleManagement/directory/roleEligibilityScheduleInstances?`$filter=$filter")['value'])
@@ -582,21 +583,21 @@ function Get-M365UserAdminRoles {
         $scope = [string]$Item['directoryScopeId']
         [pscustomobject]@{
             RoleName = if ($names.ContainsKey($roleId)) { $names[$roleId] } else { $roleId }
-            Kind     = if ($Kind -eq 'Aktiv' -and [string]$Item['principalId'] -ne $UserId) { 'Aktiv (über Gruppe)' } else { $Kind }
-            Scope    = if ($scope -eq '/') { 'Mandant' } elseif ($scope -like '/administrativeUnits/*') { 'Verwaltungseinheit' } else { $scope }
+            Kind     = if ($Kind -eq 'Active' -and [string]$Item['principalId'] -ne $UserId) { T 'Role.Kind.ActiveViaGroup' } else { T "Role.Kind.$Kind" }
+            Scope    = if ($scope -eq '/') { T 'Role.Scope.Tenant' } elseif ($scope -like '/administrativeUnits/*') { T 'Role.Scope.AdminUnit' } else { $scope }
         }
     }
 
     @(
-        $assignments | Where-Object { $null -ne $_ } | ForEach-Object { & $format $_ 'Aktiv' }
-        $eligible | Where-Object { $null -ne $_ } | ForEach-Object { & $format $_ 'Berechtigt (PIM)' }
+        $assignments | Where-Object { $null -ne $_ } | ForEach-Object { & $format $_ 'Active' }
+        $eligible | Where-Object { $null -ne $_ } | ForEach-Object { & $format $_ 'Eligible' }
     ) | Sort-Object RoleName, Kind -Unique
 }
 
 function Remove-M365UserAuthMethod {
     <#
     .SYNOPSIS
-        Löscht eine Authentifizierungsmethode (Objekt aus Get-M365UserAuthMethods) eines Benutzers.
+        Deletes an authentication method (object from Get-M365UserAuthMethods) of a user.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param(
@@ -605,11 +606,11 @@ function Remove-M365UserAuthMethod {
     )
 
     if (-not $Method.CanDelete) {
-        throw "Die Methode '$($Method.TypeName)' kann nicht gelöscht werden."
+        throw (T 'Methods.CannotDelete' $Method.TypeName)
     }
 
     $userPart = [uri]::EscapeDataString($UserId)
-    # QR-Code + PIN ist ein Singleton ohne Methoden-ID in der URL.
+    # QR code + PIN is a singleton without a method ID in the URL.
     $uri = if ($Method.Segment -eq 'qrCodePinMethod') {
         "beta/users/$userPart/authentication/qrCodePinMethod"
     }
@@ -617,7 +618,7 @@ function Remove-M365UserAuthMethod {
         "beta/users/$userPart/authentication/$($Method.Segment)/$([uri]::EscapeDataString($Method.Id))"
     }
 
-    if ($PSCmdlet.ShouldProcess("$($Method.TypeName) ($($Method.Id))", 'Löschen')) {
+    if ($PSCmdlet.ShouldProcess("$($Method.TypeName) ($($Method.Id))", 'Delete')) {
         Invoke-M365GraphRequest -Method DELETE -Uri $uri | Out-Null
     }
 }

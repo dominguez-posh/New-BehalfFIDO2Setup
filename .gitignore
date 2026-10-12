@@ -1,9 +1,9 @@
-# Gespeicherte QR-Codes enthalten TOTP-Secrets
+# Saved QR codes contain TOTP secrets
 *.png
-# Ausnahme: Screenshots für die Dokumentation
+# Exception: screenshots for the documentation
 !docs/*.png
 
-# Editor / Betriebssystem
+# Editor / operating system
 .vscode/
 Thumbs.db
 desktop.ini

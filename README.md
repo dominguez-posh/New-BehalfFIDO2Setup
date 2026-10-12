@@ -28,6 +28,7 @@ Mit diesem Tool richten Administratoren und Helpdesk-Mitarbeitende **Multi-Fakto
 | 📋 | **MFA-Methoden ansehen und löschen** – alle registrierten Methoden mit Datum und Details |
 | ➕ | **Methoden einrichten** – FIDO2-Stick, TOTP-Karten, Temporary Access Pass und Fake-MFA |
 | 🆘 | **Breakglass-Account** – Notfallzugang mit FIDO2-Stick und unbekanntem Kennwort anlegen |
+| 🌐 | **Mehrsprachig** – Englisch (Standard), Deutsch, Spanisch, Französisch, Italienisch, Portugiesisch, Niederländisch und Polnisch |
 
 ---
 
@@ -46,7 +47,9 @@ Beim allerersten Start werden benötigte Komponenten automatisch installiert. Da
 
 ## Bedienung Schritt für Schritt
 
-### 1. Anmelden
+### 1. Sprache wählen und anmelden
+
+Die Oberfläche startet auf **Englisch**. Über das Auswahlfeld oben rechts neben „Sign in“ lässt sich die Sprache jederzeit umstellen, zum Beispiel auf **Deutsch** – ohne Neustart. Die Auswahl wird für den eigenen Windows-Benutzer gespeichert und beim nächsten Start übernommen.
 
 Oben rechts auf **„Anmelden“** klicken. Nach erfolgreicher Anmeldung steht dort in Grün *„Verbunden als …“* und der Tenant. Mit **„Abmelden“** wird die Sitzung beendet – das passiert auch automatisch beim Schließen des Fensters.
 
@@ -247,5 +250,13 @@ In den **Authentifizierungsmethoden-Richtlinien** (Entra Admin Center → Schutz
 | `UI/BreakGlassDialog.xaml` | Dialog für neue Breakglass-Accounts |
 | `Modules/Graph.psm1` | Anmeldung, Graph-Anfragen, Benutzer, Domains, Rollen, MFA-Ampel, Lesen/Löschen von Methoden |
 | `Modules/Provisioning.psm1` | Einrichtung von FIDO2, TOTP-Karten, Fake-MFA, TAP und Breakglass-Accounts |
+| `Modules/Localization.psm1` | Mehrsprachigkeit: lädt die Sprachdateien und liefert die Texte |
+| `Languages/*.json` | Texte je Sprache (`en.json` ist die Referenz) |
 | `Install-Prerequisites.ps1` | Optionale Vorabinstallation aller Module |
 | `docs/` | Screenshots für diese Dokumentation |
+
+## Weitere Sprache hinzufügen
+
+1. `Languages/en.json` kopieren und nach dem Sprachcode benennen, z. B. `sv.json` für Schwedisch.
+2. `"_language"` auf den Namen der Sprache in der Sprache selbst setzen (z. B. `"Svenska"`) und alle Texte übersetzen. Platzhalter wie `{0}` müssen erhalten bleiben.
+3. Das Tool neu starten – die Sprache erscheint automatisch in der Auswahl. Fehlende Texte werden auf Englisch angezeigt.
