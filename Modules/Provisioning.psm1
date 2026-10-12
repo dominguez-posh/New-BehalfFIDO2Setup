@@ -1,19 +1,29 @@
-﻿Set-StrictMode -Version Latest
+﻿<#
+.SYNOPSIS
+    Einrichtung von MFA-Methoden im Namen eines Benutzers.
+
+.DESCRIPTION
+    FIDO2 (DSInternals.Passkeys), Hardware-OATH/TOTP (feste und programmierbare Karten, Fake-MFA)
+    und Temporary Access Pass. Benötigt die Graph-Funktionen aus Graph.psm1
+    (Invoke-M365GraphRequest, ConvertTo-LocalDate), die global geladen sein müssen.
+#>
+
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Anzeigenamen im Dropdown (UI\MainWindow.xaml) -> müssen exakt übereinstimmen.
-$script:MethodFido2       = 'FIDO2 Security Key'
-$script:MethodFixedTotp   = 'TOTP-Karte mit festem Secret'
-$script:MethodProgTotp    = 'Programmierbare TOTP-Karte'
-$script:MethodTap         = 'Temporary Access Pass (2 Stunden)'
-$script:MethodFakeMfa     = 'Fake-MFA (TOTP ohne Hinterlegung)'
+# Anzeigenamen im Dropdown (UI\MainWindow.xaml) - müssen exakt übereinstimmen.
+$script:MethodFido2     = 'FIDO2 Security Key'
+$script:MethodFixedTotp = 'TOTP-Karte mit festem Secret'
+$script:MethodProgTotp  = 'Programmierbare TOTP-Karte'
+$script:MethodTap       = 'Temporary Access Pass (2 Stunden)'
+$script:MethodFakeMfa   = 'Fake-MFA (TOTP ohne Hinterlegung)'
 
-$script:TapLifetimeMinutes   = 120
-$script:OathManufacturer     = 'unique projects'
-$script:OathIssuer           = 'Microsoft 365'
-$script:Base32Alphabet       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
-$script:Fido2ModuleVersion   = '1.0.6'
-$script:AuthMethodPolicyUrl  = 'https://entra.microsoft.com/#view/Microsoft_AAD_IAM/AuthenticationMethodsMenuBlade/~/AdminAuthMethods'
+$script:TapLifetimeMinutes  = 120
+$script:OathManufacturer    = 'unique projects'
+$script:OathIssuer          = 'Microsoft 365'
+$script:Base32Alphabet      = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+$script:Fido2ModuleVersion  = '1.0.6'   # Neuere DSInternals.Passkeys-Versionen haben eine geänderte API
+$script:AuthMethodPolicyUrl = 'https://entra.microsoft.com/#view/Microsoft_AAD_IAM/AuthenticationMethodsMenuBlade/~/AdminAuthMethods'
 
 #region Allgemeine Hilfsfunktionen
 
@@ -259,7 +269,7 @@ function New-HardwareOathTotp {
 #region Provisionierungsmethoden
 
 function Start-Fido2Provisioning {
-    param([Parameter(Mandatory)]$User, [Parameter(Mandatory)][string]$AppRoot, [hashtable]$Options)
+    param([Parameter(Mandatory)]$User, [hashtable]$Options = @{})
 
     $serial = Get-RequiredOption -Options $Options -Name 'SerialNumber' -Label 'Seriennummer / interne ID'
     $upn = [string]$User.UserPrincipalName
@@ -267,7 +277,6 @@ function Start-Fido2Provisioning {
         throw "Der UPN ist zu lang ($($upn.Length) Zeichen). Für FIDO2 sind maximal 64 Zeichen erlaubt."
     }
 
-    # DSInternals.Passkeys ist auf 1.0.6 gepinnt (neuere Versionen haben eine geänderte API).
     Import-RequiredModule -Name 'DSInternals.Passkeys' -RequiredVersion $script:Fido2ModuleVersion -SkipPublisherCheck
 
     $displayName = "FIDO2-$serial"
@@ -306,7 +315,7 @@ function Start-Fido2Provisioning {
 }
 
 function Start-FixedSecretTotpProvisioning {
-    param([Parameter(Mandatory)]$User, [Parameter(Mandatory)][string]$AppRoot, [hashtable]$Options)
+    param([Parameter(Mandatory)]$User, [hashtable]$Options = @{})
 
     $serial = Get-RequiredOption -Options $Options -Name 'SerialNumber' -Label 'Seriennummer'
     $secret = ConvertTo-NormalizedTotpSecret -Secret (Get-RequiredOption -Options $Options -Name 'Secret' -Label 'Secret der Karte')
@@ -319,7 +328,7 @@ function Start-FixedSecretTotpProvisioning {
 }
 
 function Start-ProgrammableTotpProvisioning {
-    param([Parameter(Mandatory)]$User, [Parameter(Mandatory)][string]$AppRoot, [hashtable]$Options)
+    param([Parameter(Mandatory)]$User, [hashtable]$Options = @{})
 
     $serial = Get-RequiredOption -Options $Options -Name 'SerialNumber' -Label 'Seriennummer'
     $secret = New-TotpSecret
@@ -349,7 +358,7 @@ function Start-ProgrammableTotpProvisioning {
 }
 
 function Start-FakeMfaProvisioning {
-    param([Parameter(Mandatory)]$User, [Parameter(Mandatory)][string]$AppRoot, [hashtable]$Options)
+    param([Parameter(Mandatory)]$User, [hashtable]$Options = @{})
 
     # TOTP mit zufälligem Secret, das nach der Aktivierung verworfen wird:
     # Bei der Anmeldung wird eine MFA-Methode abgefragt, die niemand bedienen kann.
@@ -364,7 +373,7 @@ function Start-FakeMfaProvisioning {
 }
 
 function Start-TemporaryAccessPassProvisioning {
-    param([Parameter(Mandatory)]$User, [Parameter(Mandatory)][string]$AppRoot, [hashtable]$Options)
+    param([Parameter(Mandatory)]$User, [hashtable]$Options = @{})
 
     $userPart = [uri]::EscapeDataString($User.Id)
     $baseUri = "v1.0/users/$userPart/authentication/temporaryAccessPassMethods"
@@ -406,6 +415,14 @@ function Start-TemporaryAccessPassProvisioning {
 #endregion
 
 function Invoke-MfaProvisioning {
+    <#
+    .SYNOPSIS
+        Richtet die gewählte MFA-Methode für einen Benutzer ein.
+    .PARAMETER Options
+        Zusätzliche Eingaben aus der GUI: SerialNumber, Secret.
+    .OUTPUTS
+        Ergebnisobjekt aus New-ProvisioningResult.
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][ValidateSet(
@@ -416,11 +433,9 @@ function Invoke-MfaProvisioning {
             'Fake-MFA (TOTP ohne Hinterlegung)'
         )][string]$Method,
         [Parameter(Mandatory)]$User,
-        [Parameter(Mandatory)][string]$AppRoot,
-        # Zusätzliche Eingaben aus der GUI, z. B. SerialNumber, Secret
         [hashtable]$Options = @{}
     )
-    $params = @{ User = $User; AppRoot = $AppRoot; Options = $Options }
+    $params = @{ User = $User; Options = $Options }
     switch ($Method) {
         $script:MethodFido2     { Start-Fido2Provisioning @params }
         $script:MethodFixedTotp { Start-FixedSecretTotpProvisioning @params }
