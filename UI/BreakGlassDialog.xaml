@@ -1,0 +1,70 @@
+﻿<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Breakglass-Account erstellen"
+        Width="520" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="White" FontFamily="Segoe UI">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="Primary" Color="#0067B8"/>
+        <SolidColorBrush x:Key="MutedText" Color="#64748B"/>
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="16,9"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Background" Value="{StaticResource Primary}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="BorderBrush" Value="#D0D7DE"/>
+        </Style>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#242424"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedText}"/>
+            <Setter Property="Margin" Value="0,14,0,4"/>
+        </Style>
+    </Window.Resources>
+
+    <StackPanel>
+        <Border Background="#0F172A" Padding="24,16">
+            <StackPanel>
+                <TextBlock Text="Breakglass-Account erstellen" Foreground="White" FontSize="18" FontWeight="SemiBold"/>
+                <TextBlock Text="Notfallzugang mit FIDO2-Stick, ohne bekanntes Kennwort" Foreground="#CBD5E1" FontSize="12" Margin="0,4,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <StackPanel Margin="24,10,24,20">
+            <TextBlock Text="Domain" Style="{StaticResource Label}"/>
+            <ComboBox Name="CmbBgDomain" Padding="8"/>
+            <TextBlock Name="TxtBgUpnHint" Text="" Style="{StaticResource Label}" Margin="0,4,0,0"/>
+
+            <CheckBox Name="ChkBgGlobalAdmin" Content="Rolle Global Administrator zuweisen" IsChecked="True" Margin="0,16,0,0"/>
+
+            <CheckBox Name="ChkBgFido2" Content="FIDO2-Stick direkt registrieren" IsChecked="True" Margin="0,10,0,0"/>
+            <StackPanel Name="PnlBgSerial" Margin="22,0,0,0">
+                <TextBlock Text="Seriennummer / interne ID des Sticks" Style="{StaticResource Label}" Margin="0,8,0,4"/>
+                <TextBox Name="TxtBgSerial"/>
+            </StackPanel>
+
+            <Border Background="#F1F5F9" CornerRadius="4" Padding="12,10" Margin="0,18,0,0">
+                <StackPanel>
+                    <TextBlock FontSize="12" Text="• Das Kennwort wird zufällig erzeugt (255 Zeichen) und weder angezeigt noch gespeichert."/>
+                    <TextBlock FontSize="12" Margin="0,4,0,0" Text="• Bis der FIDO2-Stick registriert ist, sichert ein Fake-MFA den Account ab. Danach wird es entfernt."/>
+                    <TextBlock FontSize="12" Margin="0,4,0,0" Text="• Anschließend den Account von Conditional-Access-Richtlinien ausnehmen und eine Anmeldebenachrichtigung einrichten."/>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button Name="BtnBgCancel" Content="Abbrechen" Background="#64748B" IsCancel="True"/>
+                <Button Name="BtnBgCreate" Content="Account erstellen" IsDefault="True"/>
+            </StackPanel>
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -101,6 +101,9 @@
         <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Background" Value="{StaticResource Secondary}"/>
         </Style>
+        <Style x:Key="HeaderButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="#334155"/>
+        </Style>
         <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Background" Value="{StaticResource Danger}"/>
         </Style>
@@ -160,14 +163,21 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel>
                     <TextBlock Text="M365 MFA Administration" Foreground="White" FontSize="24" FontWeight="SemiBold"/>
                     <TextBlock Text="FIDO2-, TOTP- und TAP-Provisionierung" Foreground="#CBD5E1" FontSize="13" Margin="0,4,0,0"/>
                 </StackPanel>
-                <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0">
                     <TextBlock Name="TxtConnectionStatus" Text="Nicht verbunden" Foreground="#FCA5A5" FontWeight="SemiBold" HorizontalAlignment="Right"/>
-                    <TextBlock Name="TxtTenant" Text="Tenant: -" Foreground="#CBD5E1" FontSize="12" Margin="0,4,0,0"/>
+                    <TextBlock Name="TxtTenant" Text="Tenant: -" Foreground="#CBD5E1" FontSize="12" Margin="0,4,0,0" HorizontalAlignment="Right"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Name="BtnBreakGlass" Content="Breakglass-Account …" IsEnabled="False" Style="{StaticResource HeaderButton}"
+                            ToolTip="Neuen Breakglass-Account mit FIDO2-Stick anlegen"/>
+                    <Button Name="BtnLogin" Content="Anmelden"/>
+                    <Button Name="BtnLogout" Content="Abmelden" IsEnabled="False" Style="{StaticResource HeaderButton}"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -179,50 +189,52 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Linke Spalte: Verbindung, Suche, Ergebnisse, MFA-Methoden -->
+            <!-- Linke Spalte: Suche (Ergebnisse als Popup) und MFA-Methoden -->
             <Grid Grid.Column="0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*" MinHeight="120"/>
-                    <RowDefinition Height="2.4*" MinHeight="300"/>
+                    <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <GroupBox Grid.Row="0" Header="1. Verbindung">
-                    <StackPanel Orientation="Horizontal">
-                        <Button Name="BtnLogin" Content="Mit Microsoft 365 anmelden"/>
-                        <Button Name="BtnLogout" Content="Abmelden" IsEnabled="False" Style="{StaticResource SecondaryButton}"/>
-                    </StackPanel>
-                </GroupBox>
-
-                <GroupBox Grid.Row="1" Header="2. Benutzer suchen">
-                    <Grid>
+                <GroupBox Grid.Row="0" Header="1. Benutzer suchen">
+                    <Grid Name="SearchPanel">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBox Name="TxtSearch" Margin="4" ToolTip="Name, UPN, E-Mail-Adresse oder Objekt-ID"/>
+                        <TextBox Name="TxtSearch" Margin="4" ToolTip="Name, UPN, E-Mail-Adresse oder Objekt-ID - Enter startet die Suche"/>
                         <Button Name="BtnSearch" Grid.Column="1" Content="Suchen" IsEnabled="False"/>
+
+                        <!-- Suchergebnisse klappen unter dem Suchfeld auf -->
+                        <Popup Name="PopUsers" PlacementTarget="{Binding ElementName=SearchPanel}" Placement="Bottom"
+                               Width="{Binding ActualWidth, ElementName=SearchPanel}"
+                               StaysOpen="True" AllowsTransparency="True" PopupAnimation="Fade">
+                            <Border Background="White" BorderBrush="#D0D7DE" BorderThickness="1" CornerRadius="4" Margin="0,4,8,8" Padding="8">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.25"/>
+                                </Border.Effect>
+                                <StackPanel>
+                                    <TextBlock Name="TxtUserHits" Text="" Style="{StaticResource Label}" Margin="2,0,0,6"/>
+                                    <DataGrid Name="DgUsers" MaxHeight="320">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Anzeigename" Binding="{Binding DisplayName}" Width="2*" ElementStyle="{StaticResource CellText}"/>
+                                            <DataGridTextColumn Header="UPN" Binding="{Binding UserPrincipalName}" Width="2*" ElementStyle="{StaticResource CellText}"/>
+                                            <DataGridTextColumn Header="E-Mail" Binding="{Binding Mail}" Width="2*" ElementStyle="{StaticResource CellText}"/>
+                                            <DataGridCheckBoxColumn Header="Aktiv" Binding="{Binding AccountEnabled}" Width="60"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
                     </Grid>
                 </GroupBox>
 
-                <GroupBox Grid.Row="2" Header="Suchergebnisse">
-                    <DataGrid Name="DgUsers">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Anzeigename" Binding="{Binding DisplayName}" Width="2*" ElementStyle="{StaticResource CellText}"/>
-                            <DataGridTextColumn Header="UPN" Binding="{Binding UserPrincipalName}" Width="2*" ElementStyle="{StaticResource CellText}"/>
-                            <DataGridTextColumn Header="E-Mail" Binding="{Binding Mail}" Width="2*" ElementStyle="{StaticResource CellText}"/>
-                            <DataGridCheckBoxColumn Header="Aktiv" Binding="{Binding AccountEnabled}" Width="70"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </GroupBox>
-
-                <GroupBox Grid.Row="3" Header="Registrierte MFA-Methoden" Margin="0">
+                <GroupBox Grid.Row="1" Name="GrpMethods" Header="2. Registrierte MFA-Methoden" Margin="0">
                     <Grid>
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="*" MinHeight="120"/>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="90"/>
+                            <RowDefinition Height="1.3*" MinHeight="140"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <DataGrid Name="DgMethods">
@@ -240,6 +252,8 @@
                                 </DataGridTextColumn>
                             </DataGrid.Columns>
                         </DataGrid>
+                        <TextBlock Name="TxtNoUser" Text="Bitte oben einen Benutzer suchen und auswählen."
+                                   Style="{StaticResource Label}" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         <TextBlock Grid.Row="1" Text="Alle Eigenschaften der ausgewählten Methode" Style="{StaticResource Label}" Margin="0,10,0,4"/>
                         <TextBox Grid.Row="2" Name="TxtMethodDetails" IsReadOnly="True" TextWrapping="NoWrap"
                                  FontFamily="Consolas" FontSize="11" Background="#F8FAFC"
@@ -282,6 +296,43 @@
                             </Grid>
 
                             <Separator Margin="0,2,0,10"/>
+
+                            <!-- MFA-Ampel -->
+                            <TextBlock Text="MFA-Status" Style="{StaticResource Label}"/>
+                            <Border Name="BdgMfa" CornerRadius="12" Padding="10,4" Margin="0,4,0,0" HorizontalAlignment="Left"
+                                    Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Name="DotMfa" Width="10" Height="10" Fill="#94A3B8" VerticalAlignment="Center"/>
+                                    <TextBlock Name="TxtMfaLevel" Text="-" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                            <TextBlock Name="TxtMfaHints" Text="" FontSize="11" Foreground="#475569" TextWrapping="Wrap" Margin="2,6,0,10" Visibility="Collapsed"/>
+
+                            <!-- Administrative Rollen -->
+                            <TextBlock Text="Administrative Rollen" Style="{StaticResource Label}" Margin="0,4,0,0"/>
+                            <Grid Margin="0,2,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Name="TxtRoleSummary" Text="-" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                <Button Grid.Column="1" Name="BtnShowRoles" Content="Anzeigen" Style="{StaticResource CopyButton}" Visibility="Collapsed"
+                                        ToolTip="Rollen ein-/ausblenden"/>
+                            </Grid>
+                            <ItemsControl Name="LstRoles" Visibility="Collapsed" Margin="0,0,0,10">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#F8FAFC" BorderBrush="#E1E5EA" BorderThickness="1" CornerRadius="3" Padding="8,5" Margin="0,0,0,4">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding RoleName}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                                <TextBlock FontSize="11" Foreground="#64748B">
+                                                    <Run Text="{Binding Kind, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding Scope, Mode=OneWay}"/>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
 
                             <TextBlock Text="Registrierte Methoden" Style="{StaticResource Label}"/>
                             <TextBlock Name="TxtMethodCount" Text="-" Margin="0,2,0,10"/>

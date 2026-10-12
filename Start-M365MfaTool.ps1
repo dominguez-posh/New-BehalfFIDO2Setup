@@ -31,14 +31,15 @@ $window = [Windows.Markup.XamlReader]::Load([System.Xml.XmlNodeReader]::new($xam
 
 $controlNames = @(
     # Kopfzeile und Verbindung
-    'TxtConnectionStatus', 'TxtTenant', 'BtnLogin', 'BtnLogout'
-    # Benutzersuche
-    'TxtSearch', 'BtnSearch', 'DgUsers'
+    'TxtConnectionStatus', 'TxtTenant', 'BtnBreakGlass', 'BtnLogin', 'BtnLogout'
+    # Benutzersuche (Ergebnisse im Popup)
+    'TxtSearch', 'BtnSearch', 'PopUsers', 'TxtUserHits', 'DgUsers'
     # MFA-Methoden
-    'DgMethods', 'TxtMethodDetails', 'BtnRefreshMethods', 'BtnDeleteMethod'
+    'GrpMethods', 'TxtNoUser', 'DgMethods', 'TxtMethodDetails', 'BtnRefreshMethods', 'BtnDeleteMethod'
     # Ausgewählter Benutzer
     'TxtSelectedName', 'TxtSelectedUpn', 'TxtSelectedId', 'BtnCopyUpn', 'BtnCopyId'
     'TxtMethodCount', 'TxtPreferredMethod', 'TxtSystemPreferred'
+    'BdgMfa', 'DotMfa', 'TxtMfaLevel', 'TxtMfaHints', 'TxtRoleSummary', 'BtnShowRoles', 'LstRoles'
     # Methode konfigurieren
     'CmbMethod', 'PnlSerial', 'LblSerial', 'TxtSerial', 'PnlSecret', 'PwdSecret', 'TxtMethodHint', 'BtnExecute'
     # Ergebnis: Temporary Access Pass
@@ -135,6 +136,7 @@ function Set-Busy {
     $script:ProgressBar.Visibility       = if ($Busy) { 'Visible' } else { 'Collapsed' }
     $script:BtnLogin.IsEnabled           = -not $Busy -and -not $connected
     $script:BtnLogout.IsEnabled          = -not $Busy -and $connected
+    $script:BtnBreakGlass.IsEnabled      = -not $Busy -and $connected
     $script:BtnSearch.IsEnabled          = -not $Busy -and $connected
     $script:BtnExecute.IsEnabled         = -not $Busy -and $hasUser
     $script:BtnRefreshMethods.IsEnabled  = -not $Busy -and $connected -and $hasUser
@@ -231,6 +233,57 @@ function Hide-Results {
 
 #region Benutzer- und MFA-Ansicht
 
+# Farben der MFA-Ampel: Hintergrund, Rahmen, Punkt, Text
+$script:MfaLevelColors = @{
+    Red     = @('#FEE2E2', '#FCA5A5', '#DC2626', '#991B1B')
+    Yellow  = @('#FEF3C7', '#FCD34D', '#D97706', '#92400E')
+    Green   = @('#DCFCE7', '#86EFAC', '#16A34A', '#166534')
+    Neutral = @('#F1F5F9', '#CBD5E1', '#94A3B8', '#242424')
+}
+
+function Set-MfaIndicator {
+    param($Assessment)
+    $level = if ($Assessment) { $Assessment.Level } else { 'Neutral' }
+    $colors = $script:MfaLevelColors[$level]
+    $script:BdgMfa.Background = $colors[0]
+    $script:BdgMfa.BorderBrush = $colors[1]
+    $script:DotMfa.Fill = $colors[2]
+    $script:TxtMfaLevel.Foreground = $colors[3]
+    $script:TxtMfaLevel.Text = if ($Assessment) { $Assessment.Title } else { '-' }
+
+    $hints = @(if ($Assessment) { $Assessment.Hints })
+    $script:TxtMfaHints.Text = ($hints | ForEach-Object { "• $_" }) -join [Environment]::NewLine
+    $script:TxtMfaHints.Visibility = if ($hints.Count) { 'Visible' } else { 'Collapsed' }
+}
+
+function Set-AdminRoles {
+    param([object[]]$Roles, [string]$Status)
+    $Roles = @($Roles | Where-Object { $null -ne $_ })
+    $script:LstRoles.ItemsSource = $Roles
+    $script:LstRoles.Visibility = 'Collapsed'
+    $script:BtnShowRoles.Content = 'Anzeigen'
+    $script:BtnShowRoles.IsEnabled = $Roles.Count -gt 0
+    $script:BtnShowRoles.Visibility = if ($Roles.Count) { 'Visible' } else { 'Collapsed' }
+
+    if ($Status) {
+        $script:TxtRoleSummary.Text = $Status
+        $script:TxtRoleSummary.Foreground = $script:MfaLevelColors.Neutral[3]
+        $script:TxtRoleSummary.FontWeight = 'Normal'
+    }
+    elseif (-not $Roles.Count) {
+        $script:TxtRoleSummary.Text = 'Keine'
+        $script:TxtRoleSummary.Foreground = $script:MfaLevelColors.Neutral[3]
+        $script:TxtRoleSummary.FontWeight = 'Normal'
+    }
+    else {
+        $names = @($Roles | Select-Object -ExpandProperty RoleName -Unique)
+        $highlight = if ($names -contains 'Global Administrator') { ' (inkl. Global Administrator)' } else { '' }
+        $script:TxtRoleSummary.Text = "$($names.Count) Rolle(n)$highlight"
+        $script:TxtRoleSummary.Foreground = $script:MfaLevelColors.Yellow[3]
+        $script:TxtRoleSummary.FontWeight = 'SemiBold'
+    }
+}
+
 function Clear-MfaView {
     $script:SelectedMethod = $null
     $script:DgMethods.ItemsSource = $null
@@ -238,6 +291,8 @@ function Clear-MfaView {
     $script:TxtMethodCount.Text = '-'
     $script:TxtPreferredMethod.Text = '-'
     $script:TxtSystemPreferred.Text = '-'
+    Set-MfaIndicator $null
+    Set-AdminRoles -Roles @() -Status '-'
 }
 
 function Clear-SelectedUser {
@@ -246,7 +301,36 @@ function Clear-SelectedUser {
     $script:TxtSelectedName.Text = '-'
     $script:TxtSelectedUpn.Text = '-'
     $script:TxtSelectedId.Text = '-'
+    $script:GrpMethods.Header = '2. Registrierte MFA-Methoden'
+    $script:TxtNoUser.Visibility = 'Visible'
     Clear-MfaView
+}
+
+function Select-User {
+    param([Parameter(Mandatory)]$User)
+    Hide-Results
+    $script:SelectedUser = $User
+    $script:TxtSelectedName.Text = $User.DisplayName
+    $script:TxtSelectedUpn.Text = $User.UserPrincipalName
+    $script:TxtSelectedId.Text = $User.Id
+    $script:GrpMethods.Header = "2. Registrierte MFA-Methoden - $($User.DisplayName) ($($User.UserPrincipalName))"
+    $script:TxtNoUser.Visibility = 'Collapsed'
+    Write-UiLog "Benutzer ausgewählt: $($User.UserPrincipalName)"
+    Update-MfaView
+}
+
+function Set-ConnectionStatus {
+    param($Context)
+    if ($null -eq $Context) {
+        $script:TxtConnectionStatus.Text = 'Nicht verbunden'
+        $script:TxtConnectionStatus.Foreground = '#FCA5A5'
+        $script:TxtTenant.Text = 'Tenant: -'
+    }
+    else {
+        $script:TxtConnectionStatus.Text = "Verbunden als $($Context.Account)"
+        $script:TxtConnectionStatus.Foreground = '#4ADE80'
+        $script:TxtTenant.Text = "Tenant: $($Context.TenantId)"
+    }
 }
 
 function Update-MfaView {
@@ -295,6 +379,20 @@ function Update-MfaView {
         $script:TxtMethodCount.Text = "$($methods.Count)"
         Write-UiLog "$($methods.Count) Methode(n) gefunden für $($user.UserPrincipalName)." 'Success'
 
+        $roles = @()
+        try {
+            $roles = @(Get-M365UserAdminRoles -UserId $user.Id)
+            Set-AdminRoles -Roles $roles
+        }
+        catch {
+            Set-AdminRoles -Roles @() -Status 'Nicht verfügbar'
+            Write-UiLog "Administrative Rollen konnten nicht gelesen werden: $($_.Exception.Message)" 'Warning'
+        }
+
+        $assessment = Get-M365MfaAssessment -Methods $methods -HasAdminRoles ($roles.Count -gt 0)
+        Set-MfaIndicator $assessment
+        Write-UiLog "MFA-Status: $($assessment.Title)" $(if ($assessment.Level -eq 'Green') { 'Success' } else { 'Warning' })
+
         try {
             $prefs = Get-M365UserSignInPreferences -UserId $user.Id
             $script:TxtPreferredMethod.Text = $prefs.PreferredMethod
@@ -323,10 +421,9 @@ $BtnLogin.Add_Click({
         Set-Busy $true
         Write-UiLog 'Interaktive Anmeldung an Microsoft Graph wird gestartet.'
         $context = Connect-M365Graph
-        $TxtConnectionStatus.Text = "Verbunden als $($context.Account)"
-        $TxtConnectionStatus.Foreground = '#107C10'
-        $TxtTenant.Text = "Tenant: $($context.TenantId)"
+        Set-ConnectionStatus $context
         Write-UiLog "Anmeldung erfolgreich: $($context.Account)" 'Success'
+        $TxtSearch.Focus() | Out-Null
     }
     catch {
         Write-UiError -Message $_.Exception.Message -Title 'Anmeldefehler'
@@ -339,11 +436,10 @@ $BtnLogin.Add_Click({
 $BtnLogout.Add_Click({
     try {
         Disconnect-M365Graph
+        $PopUsers.IsOpen = $false
         $DgUsers.ItemsSource = $null
         Clear-SelectedUser
-        $TxtConnectionStatus.Text = 'Nicht verbunden'
-        $TxtConnectionStatus.Foreground = '#A4262C'
-        $TxtTenant.Text = 'Tenant: -'
+        Set-ConnectionStatus $null
         Write-UiLog 'Microsoft-Graph-Sitzung wurde getrennt.' 'Success'
     }
     catch {
@@ -364,14 +460,25 @@ $BtnSearch.Add_Click({
         Set-Busy $true
         Write-UiLog "Benutzersuche: $term"
         $users = @(Find-M365User -SearchTerm $term)
-        $DgUsers.ItemsSource = $users
         Write-UiLog "$($users.Count) Benutzer gefunden." 'Success'
     }
     catch {
         Write-UiError -Message $_.Exception.Message -Title 'Suchfehler'
+        return
     }
     finally {
         Set-Busy $false
+    }
+
+    # Ein Treffer wird direkt ausgewählt, mehrere werden im Popup unter dem Suchfeld angezeigt.
+    switch ($users.Count) {
+        0 { Show-Message -Text "Keine Benutzer zu '$term' gefunden." -Title 'Benutzersuche' }
+        1 { $PopUsers.IsOpen = $false; Select-User -User $users[0] }
+        default {
+            $DgUsers.ItemsSource = $users
+            $TxtUserHits.Text = "$($users.Count) Treffer - Benutzer auswählen" + $(if ($users.Count -ge 50) { ' (max. 50, ggf. Suche verfeinern)' } else { '' })
+            $PopUsers.IsOpen = $true
+        }
     }
 })
 
@@ -384,25 +491,47 @@ $TxtSearch.Add_KeyDown({
 
 $DgUsers.Add_SelectionChanged({
     $user = $DgUsers.SelectedItem
-    if ($null -eq $user) {
-        Clear-SelectedUser
-        Set-Busy $false
-        return
-    }
-    if ($null -ne $script:SelectedUser -and $script:SelectedUser.Id -eq $user.Id) { return }
+    if ($null -eq $user) { return }
 
-    Hide-Results
-    $script:SelectedUser = $user
-    $TxtSelectedName.Text = $user.DisplayName
-    $TxtSelectedUpn.Text = $user.UserPrincipalName
-    $TxtSelectedId.Text = $user.Id
-    Write-UiLog "Benutzer ausgewählt: $($user.UserPrincipalName)"
-    Update-MfaView
+    $PopUsers.IsOpen = $false
+    # Auswahl im Popup zurücksetzen, damit derselbe Eintrag später erneut gewählt werden kann.
+    $DgUsers.Dispatcher.BeginInvoke([action]{ $script:DgUsers.UnselectAll() }) | Out-Null
+
+    if ($null -ne $script:SelectedUser -and $script:SelectedUser.Id -eq $user.Id) { return }
+    Select-User -User $user
 })
+
+# Klick ins Suchfeld öffnet die letzten Treffer wieder.
+$TxtSearch.Add_PreviewMouseLeftButtonUp({
+    if (-not $PopUsers.IsOpen -and @($DgUsers.ItemsSource).Count -gt 1) { $PopUsers.IsOpen = $true }
+})
+
+# Popup selbst schließen: StaysOpen="False" greift nicht zuverlässig, wenn das Popup
+# aus einem Button-Klick heraus geöffnet wird. Klicks im Popup selbst erreichen das Fenster nicht.
+$window.Add_PreviewMouseDown({
+    if ($PopUsers.IsOpen -and -not $TxtSearch.IsMouseOver -and -not $BtnSearch.IsMouseOver) { $PopUsers.IsOpen = $false }
+})
+$window.Add_PreviewKeyDown({
+    param($src, $keyArgs)
+    if ($keyArgs.Key -eq 'Escape' -and $PopUsers.IsOpen) { $PopUsers.IsOpen = $false; $keyArgs.Handled = $true }
+})
+$PopUsers.Add_KeyDown({
+    param($src, $keyArgs)
+    if ($keyArgs.Key -eq 'Escape') { $PopUsers.IsOpen = $false; $keyArgs.Handled = $true }
+})
+$window.Add_Deactivated({ $PopUsers.IsOpen = $false })
+$window.Add_LocationChanged({ $PopUsers.IsOpen = $false })
+$window.Add_SizeChanged({ $PopUsers.IsOpen = $false })
 
 $BtnCopyUpn.Add_Click({
     if ($null -eq $script:SelectedUser) { return }
     Copy-ToClipboard -Text $script:SelectedUser.UserPrincipalName -LogMessage "UPN kopiert: $($script:SelectedUser.UserPrincipalName)"
+})
+
+$BtnShowRoles.Add_Click({
+    $show = $LstRoles.Visibility -ne 'Visible'
+    $LstRoles.Visibility = if ($show) { 'Visible' } else { 'Collapsed' }
+    $BtnShowRoles.Content = if ($show) { 'Ausblenden' } else { 'Anzeigen' }
 })
 
 $BtnCopyId.Add_Click({
@@ -559,6 +688,122 @@ $BtnSaveTotpQr.Add_Click({
 })
 
 $BtnHideTotp.Add_Click({ Hide-TotpResult })
+
+#endregion
+
+#region Breakglass-Account
+
+$script:BreakGlassScopes = @(
+    'User.ReadWrite.All'                    # Benutzer anlegen und umbenennen
+    'Domain.Read.All'                       # Domains zur Auswahl lesen
+    'RoleManagement.ReadWrite.Directory'    # Global Administrator zuweisen
+)
+
+function Show-BreakGlassDialog {
+    <#
+    .SYNOPSIS
+        Zeigt den Breakglass-Dialog. Gibt die Eingaben zurück oder $null bei Abbruch.
+    #>
+    param([Parameter(Mandatory)][string[]]$Domains)
+
+    [xml]$dialogXaml = Get-Content -LiteralPath (Join-Path $script:AppRoot 'UI\BreakGlassDialog.xaml') -Raw -Encoding UTF8
+    $dialog = [Windows.Markup.XamlReader]::Load([System.Xml.XmlNodeReader]::new($dialogXaml))
+    $dialog.Owner = $window
+
+    $cmbDomain   = $dialog.FindName('CmbBgDomain')
+    $txtUpnHint  = $dialog.FindName('TxtBgUpnHint')
+    $chkAdmin    = $dialog.FindName('ChkBgGlobalAdmin')
+    $chkFido2    = $dialog.FindName('ChkBgFido2')
+    $pnlSerial   = $dialog.FindName('PnlBgSerial')
+    $txtSerial   = $dialog.FindName('TxtBgSerial')
+    $btnCreate   = $dialog.FindName('BtnBgCreate')
+
+    $cmbDomain.ItemsSource = $Domains
+    $cmbDomain.SelectedIndex = 0
+
+    $updateHint = {
+        $domain = [string]$cmbDomain.SelectedItem
+        $txtUpnHint.Text = if ($domain) { "UPN: <Objekt-ID, gekürzt>@$domain (max. 64 Zeichen für FIDO2)" } else { '' }
+    }.GetNewClosure()
+    & $updateHint
+    $cmbDomain.Add_SelectionChanged($updateHint)
+    $chkFido2.Add_Click({ $pnlSerial.IsEnabled = [bool]$chkFido2.IsChecked }.GetNewClosure())
+
+    $btnCreate.Add_Click({
+        if ($chkFido2.IsChecked -and [string]::IsNullOrWhiteSpace($txtSerial.Text)) {
+            [System.Windows.MessageBox]::Show('Bitte die Seriennummer / interne ID des FIDO2-Sticks eingeben.', 'Eingabe fehlt', 'OK', 'Information') | Out-Null
+            $txtSerial.Focus() | Out-Null
+            return
+        }
+        $dialog.DialogResult = $true
+    }.GetNewClosure())
+
+    if (-not $dialog.ShowDialog()) { return $null }
+
+    [pscustomobject]@{
+        Domain            = [string]$cmbDomain.SelectedItem
+        AssignGlobalAdmin = [bool]$chkAdmin.IsChecked
+        Fido2SerialNumber = if ($chkFido2.IsChecked) { $txtSerial.Text.Trim() } else { $null }
+    }
+}
+
+$BtnBreakGlass.Add_Click({
+    try {
+        Set-Busy $true
+        Write-UiLog 'Breakglass: Prüfe zusätzliche Berechtigungen (Benutzer anlegen, Domains lesen, Rollen zuweisen) ...'
+        Set-ConnectionStatus (Request-M365GraphScopes -Scopes $script:BreakGlassScopes)
+        $domains = @(Get-M365VerifiedDomains)
+        if (-not $domains.Count) { throw 'Es wurden keine verifizierten Domains gefunden.' }
+    }
+    catch {
+        Write-UiError -Message $_.Exception.Message -Title 'Breakglass-Account'
+        return
+    }
+    finally {
+        Set-Busy $false
+    }
+
+    $options = Show-BreakGlassDialog -Domains $domains
+    if ($null -eq $options) { return }
+
+    $question = "Neuen Breakglass-Account in '$($options.Domain)' erstellen?`n`n" +
+        "Global Administrator: $(if ($options.AssignGlobalAdmin) { 'Ja' } else { 'Nein' })`n" +
+        "FIDO2-Stick: $(if ($options.Fido2SerialNumber) { $options.Fido2SerialNumber } else { 'später einrichten (Fake-MFA bleibt aktiv)' })"
+    if (-not (Confirm-Action -Text $question -Title 'Breakglass-Account erstellen')) { return }
+
+    $result = $null
+    try {
+        Set-Busy $true
+        Hide-Results
+        $result = New-M365BreakGlassAccount -Domain $options.Domain -AssignGlobalAdmin:$options.AssignGlobalAdmin `
+            -Fido2SerialNumber $options.Fido2SerialNumber `
+            -OnProgress { param($Message) Write-UiLog "Breakglass: $Message" } `
+            -Wait { param($Milliseconds) Wait-Ui $Milliseconds }
+    }
+    catch {
+        Write-UiError -Message "Breakglass-Account konnte nicht erstellt werden: $($_.Exception.Message)" -Title 'Breakglass-Account'
+    }
+    finally {
+        Set-Busy $false
+    }
+    if ($null -eq $result) { return }
+
+    foreach ($warning in $result.Warnings) { Write-UiLog "Breakglass: $warning" 'Warning' }
+    $summary = @(
+        "Breakglass-Account erstellt: $($result.User.UserPrincipalName)"
+        ''
+        "Global Administrator: $(if ($result.GlobalAdminAssigned) { 'zugewiesen' } elseif ($options.AssignGlobalAdmin) { 'FEHLGESCHLAGEN' } else { 'nein' })"
+        "FIDO2-Stick: $(if ($result.Fido2Registered) { 'registriert' } else { 'nicht registriert' })"
+        "Fake-MFA: $(if ($result.FakeMfaActive) { 'aktiv' } else { 'nicht aktiv' })"
+    )
+    if ($result.Warnings.Count) { $summary += @('', 'Hinweise:') + @($result.Warnings | ForEach-Object { "- $_" }) }
+    $summary += @('', 'Nicht vergessen: Account von Conditional-Access-Richtlinien ausnehmen und eine Anmeldebenachrichtigung einrichten.')
+
+    Write-UiLog "Breakglass-Account erstellt: $($result.User.UserPrincipalName)" 'Success'
+    Show-Message -Text ($summary -join "`n") -Title 'Breakglass-Account' -Icon $(if ($result.Warnings.Count) { 'Warning' } else { 'Information' })
+
+    Select-User -User $result.User
+})
 
 #endregion
 

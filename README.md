@@ -6,6 +6,8 @@ Grafisches PowerShell-Tool, mit dem Administratoren MFA-Methoden **im Namen ande
 
 - **Benutzersuche** nach Anzeigename, Vor-/Nachname, UPN, E-Mail-Adresse oder Objekt-ID
 - **MFA-Übersicht** eines Benutzers: alle registrierten Methoden mit Erstellungsdatum, Details und sämtlichen Eigenschaften, bevorzugte MFA-Methode und Status der systembevorzugten MFA
+- **MFA-Ampel** mit Empfehlungen: Rot = kein MFA, Gelb = nur schwache Methoden (SMS/Anruf), Fake-MFA oder TAP, Grün = phishing-resistente Methode, TOTP oder Authenticator
+- **Administrative Rollen** des Benutzers (aktiv, über Gruppen und PIM-berechtigt), per Klick aufklappbar
 - **Methoden löschen** (mit Bestätigung)
 - **Methoden einrichten:**
 
@@ -18,6 +20,19 @@ Grafisches PowerShell-Tool, mit dem Administratoren MFA-Methoden **im Namen ande
 | Fake-MFA | Registriert ein TOTP mit zufälligem, sofort verworfenem Secret, sodass bei der Anmeldung immer MFA abgefragt wird. |
 
 TAP, Secrets und QR-Codes werden nur in der Oberfläche angezeigt, nicht protokolliert und nicht auf der Festplatte abgelegt (außer der QR-Code wird ausdrücklich gespeichert).
+
+### Breakglass-Account
+
+Über **„Breakglass-Account …“** in der Kopfzeile wird ein Notfallzugang erstellt:
+
+1. Domain auswählen (verifizierte Domains des Tenants)
+2. Benutzer mit zufälligem Kennwort (255 Zeichen, wird nie angezeigt oder gespeichert) anlegen
+3. UPN, Mail-Nickname und Anzeigename auf die Objekt-ID umstellen (UPN max. 64 Zeichen, Voraussetzung für FIDO2)
+4. Optional die Rolle **Global Administrator** zuweisen
+5. **Fake-MFA** registrieren, damit der Account sofort abgesichert ist
+6. Optional den **FIDO2-Stick** registrieren – danach wird das Fake-MFA automatisch entfernt
+
+Anschließend den Account von Conditional-Access-Richtlinien ausnehmen und eine Anmeldebenachrichtigung einrichten.
 
 ## Start
 
@@ -46,11 +61,19 @@ Delegierte Graph-Berechtigungen (Zustimmung bei der ersten Anmeldung):
 - `UserAuthenticationMethod.Read.All`
 - `UserAuthenticationMethod.ReadWrite.All`
 - `Policy.ReadWrite.AuthenticationMethod` (Hardware-OATH-Token anlegen/löschen)
+- `RoleManagement.Read.Directory` (administrative Rollen anzeigen)
+
+Nur für Breakglass-Accounts, werden erst beim ersten Klick auf „Breakglass-Account …“ angefordert:
+
+- `User.ReadWrite.All` (Benutzer anlegen)
+- `Domain.Read.All` (Domains auswählen)
+- `RoleManagement.ReadWrite.Directory` (Global Administrator zuweisen)
 
 Entra-Rollen des angemeldeten Kontos:
 
 - **Authentication Administrator** bzw. **Privileged Authentication Administrator** (für Administratorkonten)
 - **Authentication Policy Administrator** für TOTP-Karten und Fake-MFA
+- **Global Administrator** bzw. **Privileged Role Administrator** + **User Administrator** für Breakglass-Accounts
 
 In der Authentifizierungsmethoden-Richtlinie des Tenants müssen die verwendeten Methoden (FIDO2, Hardware-OATH-Token, Temporary Access Pass) aktiviert sein.
 
@@ -60,9 +83,10 @@ In der Authentifizierungsmethoden-Richtlinie des Tenants müssen die verwendeten
 |---|---|
 | `Start.cmd` | Starter per Doppelklick |
 | `Start-M365MfaTool.ps1` | Oberfläche, Zustandsverwaltung und Ereignisse |
-| `UI/MainWindow.xaml` | WPF-Layout |
-| `Modules/Graph.psm1` | Modulverwaltung, Anmeldung, Graph-Anfragen, Benutzersuche, Lesen/Löschen von Methoden |
-| `Modules/Provisioning.psm1` | Einrichtung von FIDO2, TOTP-Karten, Fake-MFA und TAP |
+| `UI/MainWindow.xaml` | WPF-Layout des Hauptfensters |
+| `UI/BreakGlassDialog.xaml` | Dialog für neue Breakglass-Accounts |
+| `Modules/Graph.psm1` | Modulverwaltung, Anmeldung, Graph-Anfragen, Benutzer- und Domainabfragen, Lesen/Löschen von Methoden |
+| `Modules/Provisioning.psm1` | Einrichtung von FIDO2, TOTP-Karten, Fake-MFA, TAP und Breakglass-Accounts |
 | `Install-Prerequisites.ps1` | Optionale Vorabinstallation aller Module |
 
 ## Hinweise

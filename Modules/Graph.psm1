@@ -15,7 +15,10 @@ $script:GraphScopes = @(
     'UserAuthenticationMethod.Read.All'
     'UserAuthenticationMethod.ReadWrite.All'
     'Policy.ReadWrite.AuthenticationMethod'   # Hardware-OATH-Token im Verzeichnis anlegen/löschen
+    'RoleManagement.Read.Directory'           # Administrative Rollen des Benutzers anzeigen
 )
+
+$script:RoleDefinitionNames = $null   # Cache: Rollen-ID -> Anzeigename
 
 #region Modulverwaltung
 
@@ -125,6 +128,34 @@ function Connect-M365Graph {
     }
 }
 
+function Request-M365GraphScopes {
+    <#
+    .SYNOPSIS
+        Fordert zusätzliche Berechtigungen an (erneute Anmeldung nur, wenn welche fehlen).
+    .OUTPUTS
+        Konto und Tenant der (ggf. neuen) Sitzung.
+    #>
+    param([Parameter(Mandatory)][string[]]$Scopes)
+
+    $context = Get-MgContext
+    $missing = @($Scopes | Where-Object { @($context.Scopes) -notcontains $_ })
+    if ($missing.Count) {
+        try {
+            Connect-MgGraph -Scopes (@($script:GraphScopes) + $Scopes | Select-Object -Unique) -NoWelcome -ErrorAction Stop | Out-Null
+        }
+        catch {
+            throw "Zusätzliche Berechtigungen ($($missing -join ', ')) wurden nicht erteilt: $($_.Exception.Message)"
+        }
+        $context = Get-MgContext
+    }
+
+    [pscustomobject]@{
+        Account  = $context.Account
+        TenantId = $context.TenantId
+        Scopes   = $context.Scopes
+    }
+}
+
 function Disconnect-M365Graph {
     <#
     .SYNOPSIS
@@ -133,6 +164,7 @@ function Disconnect-M365Graph {
     if (Test-M365GraphConnection) {
         Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
     }
+    $script:RoleDefinitionNames = $null
 }
 
 #endregion
@@ -206,7 +238,7 @@ function ConvertTo-LocalDate {
 
 #endregion
 
-#region Benutzersuche
+#region Benutzer und Domains
 
 function Find-M365User {
     <#
@@ -251,25 +283,39 @@ function Find-M365User {
         Sort-Object DisplayName
 }
 
+function Get-M365VerifiedDomains {
+    <#
+    .SYNOPSIS
+        Liefert die verifizierten Domains des Tenants, Standarddomain zuerst.
+    #>
+    $response = Invoke-M365GraphRequest -Uri 'v1.0/domains?$select=id,isVerified,isDefault'
+    @($response['value']) |
+        Where-Object { $null -ne $_ -and $_['isVerified'] } |
+        Sort-Object @{ Expression = { [bool]$_['isDefault'] }; Descending = $true }, @{ Expression = { [string]$_['id'] } } |
+        ForEach-Object { [string]$_['id'] }
+}
+
 #endregion
 
 #region Authentifizierungsmethoden
 
-# Graph-Typ -> Anzeigename und URL-Segment zum Löschen ($null = nicht löschbar)
+# Graph-Typ -> Anzeigename, URL-Segment zum Löschen ($null = nicht löschbar) und Sicherheitsstufe:
+#   PhishingResistant / Strong = vollwertiges MFA, Weak = veraltet/unsicher,
+#   Temporary = nur übergangsweise (TAP), None = kein MFA-Faktor
 $script:AuthMethodTypes = @{
-    '#microsoft.graph.fido2AuthenticationMethod'                              = @{ Name = 'FIDO2 Security Key / Passkey';          Segment = 'fido2Methods' }
-    '#microsoft.graph.microsoftAuthenticatorAuthenticationMethod'             = @{ Name = 'Microsoft Authenticator';               Segment = 'microsoftAuthenticatorMethods' }
-    '#microsoft.graph.passwordlessMicrosoftAuthenticatorAuthenticationMethod' = @{ Name = 'Authenticator (kennwortlos, veraltet)'; Segment = 'passwordlessMicrosoftAuthenticatorMethods' }
-    '#microsoft.graph.phoneAuthenticationMethod'                              = @{ Name = 'Telefon (SMS/Anruf)';                   Segment = 'phoneMethods' }
-    '#microsoft.graph.emailAuthenticationMethod'                              = @{ Name = 'E-Mail (SSPR)';                         Segment = 'emailMethods' }
-    '#microsoft.graph.softwareOathAuthenticationMethod'                       = @{ Name = 'Software-OATH (TOTP)';                  Segment = 'softwareOathMethods' }
-    '#microsoft.graph.hardwareOathAuthenticationMethod'                       = @{ Name = 'Hardware-OATH (TOTP-Token/-Karte)';     Segment = 'hardwareOathMethods' }
-    '#microsoft.graph.windowsHelloForBusinessAuthenticationMethod'            = @{ Name = 'Windows Hello for Business';            Segment = 'windowsHelloForBusinessMethods' }
-    '#microsoft.graph.temporaryAccessPassAuthenticationMethod'                = @{ Name = 'Befristeter Zugriffspass (TAP)';        Segment = 'temporaryAccessPassMethods' }
-    '#microsoft.graph.platformCredentialAuthenticationMethod'                 = @{ Name = 'Platform Credential (macOS)';           Segment = 'platformCredentialMethods' }
-    '#microsoft.graph.qrCodePinAuthenticationMethod'                          = @{ Name = 'QR-Code + PIN';                         Segment = 'qrCodePinMethod' }
-    '#microsoft.graph.externalAuthenticationMethod'                           = @{ Name = 'Externe Authentifizierungsmethode';     Segment = 'externalAuthenticationMethods' }
-    '#microsoft.graph.passwordAuthenticationMethod'                           = @{ Name = 'Kennwort';                              Segment = $null }
+    '#microsoft.graph.fido2AuthenticationMethod'                              = @{ Name = 'FIDO2 Security Key / Passkey';          Segment = 'fido2Methods';                              Strength = 'PhishingResistant' }
+    '#microsoft.graph.windowsHelloForBusinessAuthenticationMethod'            = @{ Name = 'Windows Hello for Business';            Segment = 'windowsHelloForBusinessMethods';            Strength = 'PhishingResistant' }
+    '#microsoft.graph.platformCredentialAuthenticationMethod'                 = @{ Name = 'Platform Credential (macOS)';           Segment = 'platformCredentialMethods';                 Strength = 'PhishingResistant' }
+    '#microsoft.graph.microsoftAuthenticatorAuthenticationMethod'             = @{ Name = 'Microsoft Authenticator';               Segment = 'microsoftAuthenticatorMethods';             Strength = 'Strong' }
+    '#microsoft.graph.passwordlessMicrosoftAuthenticatorAuthenticationMethod' = @{ Name = 'Authenticator (kennwortlos, veraltet)'; Segment = 'passwordlessMicrosoftAuthenticatorMethods'; Strength = 'Strong' }
+    '#microsoft.graph.softwareOathAuthenticationMethod'                       = @{ Name = 'Software-OATH (TOTP)';                  Segment = 'softwareOathMethods';                       Strength = 'Strong' }
+    '#microsoft.graph.hardwareOathAuthenticationMethod'                       = @{ Name = 'Hardware-OATH (TOTP-Token/-Karte)';     Segment = 'hardwareOathMethods';                       Strength = 'Strong' }
+    '#microsoft.graph.externalAuthenticationMethod'                           = @{ Name = 'Externe Authentifizierungsmethode';     Segment = 'externalAuthenticationMethods';             Strength = 'Strong' }
+    '#microsoft.graph.phoneAuthenticationMethod'                              = @{ Name = 'Telefon (SMS/Anruf)';                   Segment = 'phoneMethods';                              Strength = 'Weak' }
+    '#microsoft.graph.qrCodePinAuthenticationMethod'                          = @{ Name = 'QR-Code + PIN';                         Segment = 'qrCodePinMethod';                           Strength = 'Weak' }
+    '#microsoft.graph.temporaryAccessPassAuthenticationMethod'                = @{ Name = 'Befristeter Zugriffspass (TAP)';        Segment = 'temporaryAccessPassMethods';                Strength = 'Temporary' }
+    '#microsoft.graph.emailAuthenticationMethod'                              = @{ Name = 'E-Mail (SSPR)';                         Segment = 'emailMethods';                              Strength = 'None' }
+    '#microsoft.graph.passwordAuthenticationMethod'                           = @{ Name = 'Kennwort';                              Segment = $null;                                       Strength = 'None' }
 }
 
 $script:PreferredMethodNames = @{
@@ -355,6 +401,15 @@ function Get-MethodSummary {
     return (@($parts) -join ' | ')
 }
 
+function Test-FakeMfaMethod {
+    # Vom Tool angelegte Fake-MFA-Token: Seriennummer "FAKE-..." bzw. Modell "Fake-MFA"
+    param([string]$Type, [System.Collections.IDictionary]$Raw)
+    if ($Type -ne '#microsoft.graph.hardwareOathAuthenticationMethod') { return $false }
+    $device = $Raw['device']
+    if ($device -isnot [System.Collections.IDictionary]) { return [string]$Raw['displayName'] -eq 'Fake-MFA' }
+    return ([string]$device['serialNumber'] -like 'FAKE-*') -or ([string]$device['model'] -eq 'Fake-MFA')
+}
+
 function Get-M365UserAuthMethods {
     <#
     .SYNOPSIS
@@ -389,6 +444,8 @@ function Get-M365UserAuthMethods {
             Created      = ConvertTo-LocalDate $raw['createdDateTime']
             CanDelete    = [bool]($info -and $info.Segment)
             Segment      = if ($info) { $info.Segment } else { $null }
+            Strength     = if ($info) { $info.Strength } else { 'Strong' }
+            IsFakeMfa    = Test-FakeMfaMethod -Type $type -Raw $raw
             PropertyText = @(ConvertTo-PropertyLines -Object $raw) -join [Environment]::NewLine
         }
     }
@@ -414,6 +471,126 @@ function Get-M365UserSignInPreferences {
         PreferredMethod       = $preferredName
         SystemPreferredActive = Format-GraphValue $response['isSystemPreferredAuthenticationMethodEnabled']
     }
+}
+
+function Get-M365MfaAssessment {
+    <#
+    .SYNOPSIS
+        Bewertet die MFA-Methoden eines Benutzers als Ampel (Red/Yellow/Green) mit Empfehlungen.
+    .PARAMETER Methods
+        Objekte aus Get-M365UserAuthMethods.
+    .PARAMETER HasAdminRoles
+        Für Administratoren werden phishing-resistente Methoden empfohlen.
+    #>
+    param(
+        [object[]]$Methods = @(),
+        [bool]$HasAdminRoles = $false
+    )
+
+    $real = @($Methods | Where-Object { -not $_.IsFakeMfa })
+    $phishingResistant = @($real | Where-Object Strength -eq 'PhishingResistant')
+    $strong = @($real | Where-Object { $_.Strength -in 'PhishingResistant', 'Strong' })
+    $weak = @($real | Where-Object Strength -eq 'Weak')
+    $temporary = @($real | Where-Object Strength -eq 'Temporary')
+    $fake = @($Methods | Where-Object IsFakeMfa)
+    $hints = New-Object System.Collections.Generic.List[string]
+
+    if ($strong.Count) {
+        $level = 'Green'
+        $title = if ($phishingResistant.Count) { 'Starkes MFA (phishing-resistent)' } else { 'Starkes MFA' }
+        if ($HasAdminRoles -and -not $phishingResistant.Count) {
+            $hints.Add('Administrator ohne phishing-resistente Methode: FIDO2-Stick, Passkey oder Windows Hello ergänzen.')
+        }
+        if ($weak.Count) { $hints.Add('SMS/Anruf ist zusätzlich registriert und kann entfernt werden.') }
+        if ($fake.Count) { $hints.Add('Fake-MFA ist noch registriert und kann entfernt werden.') }
+    }
+    elseif ($weak.Count) {
+        $level = 'Yellow'
+        $title = 'Nur schwaches MFA (SMS/Anruf)'
+        $hints.Add('Authenticator-App, TOTP oder FIDO2 einrichten und SMS/Anruf anschließend entfernen.')
+    }
+    elseif ($fake.Count) {
+        $level = 'Yellow'
+        $title = 'Nur Fake-MFA (Anmeldung blockiert)'
+        $hints.Add('Der Benutzer kann sich nicht anmelden, bis eine echte Methode eingerichtet ist (z. B. per TAP).')
+    }
+    elseif ($temporary.Count) {
+        $level = 'Yellow'
+        $title = 'Nur Temporary Access Pass'
+        $hints.Add('Benutzer sollte mit dem TAP jetzt eine dauerhafte Methode (Authenticator, FIDO2) registrieren.')
+    }
+    else {
+        $level = 'Red'
+        $title = 'Kein MFA - nur Kennwort'
+        $hints.Add('MFA einrichten: FIDO2-Stick, TOTP-Karte oder TAP ausstellen, damit der Benutzer den Authenticator registriert.')
+    }
+
+    if ($temporary.Count -and $level -eq 'Green') { $hints.Add('Aktiver TAP vorhanden - nach der Einrichtung löschen.') }
+
+    [pscustomobject]@{
+        Level = $level
+        Title = $title
+        Hints = @($hints)
+    }
+}
+
+function Get-M365RoleDefinitionNames {
+    # Rollen-ID -> Anzeigename, einmal pro Sitzung geladen
+    if (-not $script:RoleDefinitionNames) {
+        $names = @{}
+        $uri = 'v1.0/roleManagement/directory/roleDefinitions?$select=id,displayName'
+        while ($uri) {
+            $response = Invoke-M365GraphRequest -Uri $uri
+            foreach ($definition in @($response['value'])) { $names[[string]$definition['id']] = [string]$definition['displayName'] }
+            $uri = $response['@odata.nextLink']
+        }
+        $script:RoleDefinitionNames = $names
+    }
+    $script:RoleDefinitionNames
+}
+
+function Get-M365UserAdminRoles {
+    <#
+    .SYNOPSIS
+        Liefert die Verzeichnisrollen eines Benutzers: aktiv (direkt oder über Gruppen) und PIM-berechtigt.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$UserId)
+
+    $names = Get-M365RoleDefinitionNames
+    $filter = [uri]::EscapeDataString("principalId eq '$UserId'")
+
+    # Transitive Zuweisungen enthalten auch Rollen über rollenzuweisbare Gruppen (Beta); sonst nur direkte.
+    try {
+        $assignments = @((Invoke-M365GraphRequest -Uri "beta/roleManagement/directory/transitiveRoleAssignments?`$filter=$filter&`$count=true" `
+            -Headers @{ ConsistencyLevel = 'eventual' })['value'])
+    }
+    catch {
+        $assignments = @((Invoke-M365GraphRequest -Uri "v1.0/roleManagement/directory/roleAssignments?`$filter=$filter")['value'])
+    }
+
+    # PIM-berechtigte Rollen (benötigt Entra ID P2; ohne Lizenz einfach überspringen)
+    $eligible = @()
+    try {
+        $eligible = @((Invoke-M365GraphRequest -Uri "v1.0/roleManagement/directory/roleEligibilityScheduleInstances?`$filter=$filter")['value'])
+    }
+    catch { }
+
+    $format = {
+        param($Item, [string]$Kind)
+        $roleId = [string]$Item['roleDefinitionId']
+        $scope = [string]$Item['directoryScopeId']
+        [pscustomobject]@{
+            RoleName = if ($names.ContainsKey($roleId)) { $names[$roleId] } else { $roleId }
+            Kind     = if ($Kind -eq 'Aktiv' -and [string]$Item['principalId'] -ne $UserId) { 'Aktiv (über Gruppe)' } else { $Kind }
+            Scope    = if ($scope -eq '/') { 'Mandant' } elseif ($scope -like '/administrativeUnits/*') { 'Verwaltungseinheit' } else { $scope }
+        }
+    }
+
+    @(
+        $assignments | Where-Object { $null -ne $_ } | ForEach-Object { & $format $_ 'Aktiv' }
+        $eligible | Where-Object { $null -ne $_ } | ForEach-Object { & $format $_ 'Berechtigt (PIM)' }
+    ) | Sort-Object RoleName, Kind -Unique
 }
 
 function Remove-M365UserAuthMethod {
@@ -452,10 +629,14 @@ Export-ModuleMember -Function @(
     'Test-M365GraphConnection'
     'Connect-M365Graph'
     'Disconnect-M365Graph'
+    'Request-M365GraphScopes'
     'Invoke-M365GraphRequest'
+    'Get-M365VerifiedDomains'
     'ConvertTo-LocalDate'
     'Find-M365User'
     'Get-M365UserAuthMethods'
     'Get-M365UserSignInPreferences'
+    'Get-M365MfaAssessment'
+    'Get-M365UserAdminRoles'
     'Remove-M365UserAuthMethod'
 )
