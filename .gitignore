@@ -1,7 +1,7 @@
 # Saved QR codes contain TOTP secrets
 *.png
 # Exception: screenshots for the documentation
-!docs/*.png
+!docs/**/*.png
 
 # Editor / operating system
 .vscode/

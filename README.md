@@ -1,262 +1,269 @@
+🌐 **English** · [Deutsch](docs/README.de.md) · [Español](docs/README.es.md) · [Français](docs/README.fr.md) · [Italiano](docs/README.it.md) · [Português](docs/README.pt.md) · [Nederlands](docs/README.nl.md) · [Polski](docs/README.pl.md)
+
 # M365 MFA Administration Tool
 
-Mit diesem Tool richten Administratoren und Helpdesk-Mitarbeitende **Multi-Faktor-Authentifizierung (MFA) im Namen anderer Benutzer** ein – zum Beispiel einen FIDO2-Stick, eine TOTP-Karte oder einen befristeten Zugangscode. Außerdem zeigt es auf einen Blick, wie gut ein Benutzerkonto abgesichert ist.
+With this tool, administrators and help desk staff set up **multi-factor authentication (MFA) on behalf of other users** – for example a FIDO2 key, a TOTP card or a temporary access code. It also shows at a glance how well a user account is protected.
 
-![Hauptfenster des M365 MFA Administration Tools](docs/hauptfenster.png)
+![Main window of the M365 MFA Administration Tool](docs/images/en/main-window.png)
 
-## Inhalt
+## Contents
 
-- [Auf einen Blick](#auf-einen-blick)
-- [Schnellstart](#schnellstart)
-- [Bedienung Schritt für Schritt](#bedienung-schritt-für-schritt)
-- [Welche Methode wann?](#welche-methode-wann)
-- [Breakglass-Account erstellen](#breakglass-account-erstellen)
-- [Häufige Fragen und Fehlerbehebung](#häufige-fragen-und-fehlerbehebung)
-- [Sicherheit](#sicherheit)
-- [Für Administratoren: Voraussetzungen und Berechtigungen](#für-administratoren-voraussetzungen-und-berechtigungen)
-- [Aufbau des Projekts](#aufbau-des-projekts)
+- [At a glance](#at-a-glance)
+- [Quick start](#quick-start)
+- [Step-by-step guide](#step-by-step-guide)
+- [Which method when?](#which-method-when)
+- [Create a break-glass account](#create-a-break-glass-account)
+- [FAQ and troubleshooting](#faq-and-troubleshooting)
+- [Security](#security)
+- [For administrators: requirements and permissions](#for-administrators-requirements-and-permissions)
+- [Project structure](#project-structure)
+- [Adding a language](#adding-a-language)
 
 ---
 
-## Auf einen Blick
+## At a glance
 
-| | Funktion |
+| | Feature |
 |---|---|
-| 🔍 | **Benutzer suchen** – nach Name, E-Mail-Adresse, UPN oder Objekt-ID |
-| 🚦 | **MFA-Ampel** – zeigt sofort, ob ein Konto gut, schwach oder gar nicht abgesichert ist, inklusive Empfehlung |
-| 👑 | **Admin-Rollen** – zeigt, ob der Benutzer administrative Rechte hat |
-| 📋 | **MFA-Methoden ansehen und löschen** – alle registrierten Methoden mit Datum und Details |
-| ➕ | **Methoden einrichten** – FIDO2-Stick, TOTP-Karten, Temporary Access Pass und Fake-MFA |
-| 🆘 | **Breakglass-Account** – Notfallzugang mit FIDO2-Stick und unbekanntem Kennwort anlegen |
-| 🌐 | **Mehrsprachig** – Englisch (Standard), Deutsch, Spanisch, Französisch, Italienisch, Portugiesisch, Niederländisch und Polnisch |
+| 🔍 | **Find users** – by name, email address, UPN or object ID |
+| 🚦 | **MFA traffic light** – shows instantly whether an account is well, weakly or not protected, including a recommendation |
+| 👑 | **Admin roles** – shows whether the user has administrative rights |
+| 📋 | **View and delete MFA methods** – all registered methods with date and details |
+| ➕ | **Set up methods** – FIDO2 key, TOTP cards, Temporary Access Pass and fake MFA |
+| 🆘 | **Break-glass account** – create an emergency access account with a FIDO2 key and an unknown password |
+| 🌐 | **Multilingual** – English (default), German, Spanish, French, Italian, Portuguese, Dutch and Polish |
 
 ---
 
-## Schnellstart
+## Quick start
 
-1. Den kompletten Ordner auf den eigenen Rechner kopieren (die Dateien müssen zusammenbleiben).
-2. **`Start.cmd` doppelklicken.**
-3. Oben rechts auf **„Anmelden“** klicken und mit dem eigenen Admin-Konto anmelden.
+1. Copy the entire folder to your computer (the files must stay together).
+2. **Double-click `Start.cmd`.**
+3. Click **"Sign in"** in the top right and sign in with your own admin account.
 
 > [!TIP]
-> Für den schnellen Zugriff einfach eine Desktop-Verknüpfung auf `Start.cmd` anlegen (Rechtsklick → *Verknüpfung erstellen*).
+> For quick access, create a desktop shortcut to `Start.cmd` (right-click → *Create shortcut*).
 
-Beim allerersten Start werden benötigte Komponenten automatisch installiert. Das kann ein bis zwei Minuten dauern. Bei der ersten Anmeldung fragt Microsoft einmalig nach der Zustimmung zu den Berechtigungen des Tools.
+On the very first start, required components are installed automatically. This can take one to two minutes. On the first sign-in, Microsoft asks once for consent to the tool's permissions.
 
 ---
 
-## Bedienung Schritt für Schritt
+## Step-by-step guide
 
-### 1. Sprache wählen und anmelden
+### 1. Choose a language and sign in
 
-Die Oberfläche startet auf **Englisch**. Über das Auswahlfeld oben rechts neben „Sign in“ lässt sich die Sprache jederzeit umstellen, zum Beispiel auf **Deutsch** – ohne Neustart. Die Auswahl wird für den eigenen Windows-Benutzer gespeichert und beim nächsten Start übernommen.
+The interface starts in **English**. Use the selection box in the top right next to "Sign in" to switch the language at any time, e.g. to **German** – no restart needed. The choice is saved for your Windows user and applied on the next start.
 
-Oben rechts auf **„Anmelden“** klicken. Nach erfolgreicher Anmeldung steht dort in Grün *„Verbunden als …“* und der Tenant. Mit **„Abmelden“** wird die Sitzung beendet – das passiert auch automatisch beim Schließen des Fensters.
+Click **"Sign in"** in the top right. After a successful sign-in, it shows *"Connected as …"* in green along with the tenant. **"Sign out"** ends the session – this also happens automatically when the window is closed.
 
-### 2. Benutzer suchen
+### 2. Find a user
 
-Im Feld **„1. Benutzer suchen“** den Anfang eines Namens, einer E-Mail-Adresse oder des UPN eingeben und **Enter** drücken (oder auf **„Suchen“** klicken).
+In the **"1. Find user"** box, enter the beginning of a name, an email address or the UPN and press **Enter** (or click **"Search"**).
 
-- **Ein Treffer:** Der Benutzer wird direkt geöffnet.
-- **Mehrere Treffer:** Eine Liste klappt unter dem Suchfeld auf – den gewünschten Benutzer anklicken. Mit **Esc** oder einem Klick daneben schließt sich die Liste wieder.
+- **One result:** The user opens directly.
+- **Several results:** A list drops down below the search box – click the user you want. Press **Esc** or click elsewhere to close the list.
 
-### 3. MFA-Status verstehen
+### 3. Understand the MFA status
 
-Rechts unter **„Ausgewählter Benutzer“** zeigt die **MFA-Ampel**, wie gut das Konto abgesichert ist:
+On the right under **"Selected user"**, the **MFA traffic light** shows how well the account is protected:
 
-| Ampel | Bedeutung | Was tun? |
+| Traffic light | Meaning | What to do? |
 |---|---|---|
-| 🟢 **Starkes MFA (phishing-resistent)** | FIDO2-Stick, Passkey oder Windows Hello vorhanden | Alles in Ordnung. |
-| 🟢 **Starkes MFA** | Authenticator-App oder TOTP-Karte/-App vorhanden | In Ordnung. Für Administratoren zusätzlich FIDO2 empfohlen. |
-| 🟡 **Nur schwaches MFA** | Nur SMS oder Anruf | Bessere Methode einrichten, danach SMS/Anruf entfernen. |
-| 🟡 **Nur Fake-MFA** | Konto ist gesperrt abgesichert (siehe [Fake-MFA](#welche-methode-wann)) | Für die Nutzung eine echte Methode einrichten. |
-| 🟡 **Nur Temporary Access Pass** | Nur ein befristeter Zugangscode | Benutzer soll damit jetzt eine dauerhafte Methode einrichten. |
-| 🔴 **Kein MFA – nur Kennwort** | Keine zweite Absicherung | Dringend eine Methode einrichten. |
+| 🟢 **Strong MFA (phishing-resistant)** | FIDO2 key, passkey or Windows Hello present | All good. |
+| 🟢 **Strong MFA** | Authenticator app or TOTP card/app present | Fine. For administrators, FIDO2 is also recommended. |
+| 🟡 **Weak MFA only** | Only SMS or phone call | Set up a better method, then remove SMS/call. |
+| 🟡 **Fake MFA only** | Account is locked down (see [fake MFA](#which-method-when)) | Set up a real method for use. |
+| 🟡 **Temporary Access Pass only** | Only a temporary access code | The user should now use it to set up a permanent method. |
+| 🔴 **No MFA – password only** | No second factor | Set up a method urgently. |
 
-Unter der Ampel stehen konkrete Empfehlungen, zum Beispiel *„SMS/Anruf ist zusätzlich registriert und kann entfernt werden“*.
+Below the traffic light you will find specific recommendations, e.g. *"SMS/call is also registered and can be removed"*.
 
-Darunter zeigt **„Administrative Rollen“**, ob der Benutzer Admin-Rechte hat. Mit **„Anzeigen“** klappt die Liste auf. Dort steht pro Rolle auch, ob sie dauerhaft aktiv ist, über eine Gruppe vergeben wurde oder nur über PIM aktiviert werden kann.
+Further down, **"Administrative roles"** shows whether the user has admin rights. Click **"Show"** to expand the list. For each role it also shows whether it is permanently active, assigned via a group or only activatable via PIM.
 
-### 4. MFA-Methoden ansehen und löschen
+### 4. View and delete MFA methods
 
-Links unter **„2. Registrierte MFA-Methoden“** stehen alle Methoden des Benutzers. Ein Klick auf eine Methode zeigt darunter **alle Details** (z. B. Gerätemodell, Seriennummer, Erstellungsdatum).
+On the left under **"2. Registered MFA methods"** you see all methods of the user. Clicking a method shows **all details** below it (e.g. device model, serial number, creation date).
 
-Zum Löschen eine Methode auswählen und auf **„Methode löschen“** klicken. Vor dem Löschen erscheint eine Sicherheitsabfrage. Das Kennwort kann nicht gelöscht werden.
+To delete a method, select it and click **"Delete method"**. A confirmation prompt appears before deletion. The password cannot be deleted.
 
 > [!NOTE]
-> Microsoft übernimmt Änderungen mit wenigen Sekunden Verzögerung. Das Tool wartet automatisch, bis die Liste den neuen Stand zeigt. Bei Bedarf hilft **„Aktualisieren“**.
+> Microsoft applies changes with a delay of a few seconds. The tool automatically waits until the list shows the new state. If needed, click **"Refresh"**.
 
-### 5. Neue Methode einrichten
+### 5. Set up a new method
 
-Rechts unter **„3. Methode konfigurieren“** die gewünschte Methode auswählen:
+On the right under **"3. Configure method"**, select the method you want:
 
-![Auswahl der MFA-Methode](docs/methode-auswaehlen.png)
+![Selecting the MFA method](docs/images/en/select-method.png)
 
-Je nach Methode erscheinen passende Eingabefelder (z. B. die Seriennummer) und ein kurzer Hinweis. Dann auf **„Konfiguration starten“** klicken und die Sicherheitsabfrage bestätigen. Das Ergebnis erscheint im **Protokoll** und die Methodenliste wird automatisch aktualisiert.
+Depending on the method, matching input fields (e.g. the serial number) and a short hint appear. Then click **"Start configuration"** and confirm the prompt. The result appears in the **log** and the method list is refreshed automatically.
 
 ---
 
-## Welche Methode wann?
+## Which method when?
 
-| Methode | Wann verwenden? | Was passiert? |
+| Method | When to use? | What happens? |
 |---|---|---|
-| **FIDO2 Security Key** | Der Benutzer bekommt einen FIDO2-Stick (z. B. YubiKey). Die sicherste Methode – besonders für Administratoren. | Stick anstecken und Seriennummer eingeben. Windows fragt nach der **PIN** des Sticks und bittet, ihn zu **berühren**. Der Stick heißt danach `FIDO2-<Seriennummer>`. |
-| **TOTP-Karte mit festem Secret** | Der Benutzer bekommt eine Code-Karte, deren Geheimschlüssel (Secret) vom Hersteller mitgeliefert wurde. | Seriennummer und Secret eingeben. Die Karte wird angelegt, dem Benutzer zugewiesen und sofort aktiviert. |
-| **Programmierbare TOTP-Karte** | Der Benutzer bekommt eine Code-Karte, die man selbst programmiert (z. B. per Hersteller-App). | Seriennummer eingeben. Das Tool erzeugt ein neues Secret und zeigt **QR-Code und Secret** an. Damit die Karte programmieren, danach die Anzeige mit ✕ schließen. |
-| **Temporary Access Pass (TAP)** | Der Benutzer soll sich selbst den Authenticator oder einen Passkey einrichten, hat aber noch keine Methode. Oder: Methode verloren. | Ein Code wird erzeugt, **ab sofort 2 Stunden gültig** und mehrfach nutzbar. Er erscheint groß in einem gelben Kasten und kann kopiert werden. Ein vorhandener TAP wird ersetzt. |
-| **Fake-MFA** | Ein Konto soll abgesichert werden, das (noch) niemand aktiv nutzt – z. B. ein neuer Breakglass- oder Dienst-Account. | Es wird eine Code-Methode registriert, deren Schlüssel sofort vernichtet wird. Bei der Anmeldung wird MFA verlangt, das niemand erfüllen kann – das Konto ist dadurch geschützt. |
+| **FIDO2 security key** | The user gets a FIDO2 key (e.g. YubiKey). The most secure method – especially for administrators. | Plug in the key and enter the serial number. Windows asks for the key's **PIN** and to **touch** it. The key is then named `FIDO2-<serial number>`. |
+| **TOTP card with fixed secret** | The user gets a code card whose secret key was supplied by the manufacturer. | Enter the serial number and secret. The card is created, assigned to the user and activated immediately. |
+| **Programmable TOTP card** | The user gets a code card that you program yourself (e.g. with the manufacturer's app). | Enter the serial number. The tool generates a new secret and shows the **QR code and secret**. Use them to program the card, then close the display with ✕. |
+| **Temporary Access Pass (TAP)** | The user should set up the Authenticator or a passkey themselves but has no method yet – or has lost their method. | A code is generated, **valid immediately for 2 hours** and usable multiple times. It is shown in large type in a yellow box and can be copied. An existing TAP is replaced. |
+| **Fake MFA** | An account that nobody uses (yet) should be protected – e.g. a new break-glass or service account. | A code method is registered whose key is destroyed immediately. MFA is required at sign-in that nobody can satisfy – this protects the account. |
 
 > [!IMPORTANT]
-> **TAP, Secrets und QR-Codes werden nur ein einziges Mal angezeigt.** Sie stehen nicht im Protokoll und können später nicht erneut abgerufen werden. Wird ein QR-Code über „QR-Code speichern …“ gesichert, enthält die Datei das Secret – nach dem Programmieren bitte löschen.
+> **TAPs, secrets and QR codes are shown only once.** They are not written to the log and cannot be retrieved later. If a QR code is saved via "Save QR code …", the file contains the secret – please delete it after programming.
 
 ---
 
-## Breakglass-Account erstellen
+## Create a break-glass account
 
-Ein **Breakglass-Account** ist ein Notfallzugang, mit dem man auch dann noch in den Tenant kommt, wenn normale Admin-Zugänge nicht funktionieren (z. B. bei einer fehlerhaften Conditional-Access-Richtlinie).
+A **break-glass account** is an emergency access account that still gets you into the tenant when normal admin access fails (e.g. due to a faulty Conditional Access policy).
 
-Oben rechts auf **„Breakglass-Account …“** klicken:
+Click **"Break-glass account …"** in the top right:
 
-![Dialog „Breakglass-Account erstellen“](docs/breakglass-dialog.png)
+![Dialog "Create break-glass account"](docs/images/en/breakglass-dialog.png)
 
-1. **Domain** auswählen, unter der das Konto angelegt wird.
-2. Festlegen, ob das Konto die Rolle **Global Administrator** bekommt (empfohlen, vorausgewählt).
-3. Den **FIDO2-Stick** anstecken und seine Seriennummer eingeben.
-4. Auf **„Account erstellen“** klicken.
+1. Select the **domain** in which the account is created.
+2. Decide whether the account gets the **Global Administrator** role (recommended, preselected).
+3. Plug in the **FIDO2 key** and enter its serial number.
+4. Click **"Create account"**.
 
-Das Tool erledigt danach automatisch:
+The tool then automatically:
 
-- Konto mit einem **zufälligen Kennwort** anlegen (255 Zeichen – es wird nirgends angezeigt oder gespeichert, niemand kennt es)
-- Kontoname auf die eindeutige Objekt-ID umstellen
-- Rolle Global Administrator zuweisen
-- Konto sofort mit **Fake-MFA** absichern
-- **FIDO2-Stick registrieren** (Windows fragt nach PIN und Berührung) und danach das Fake-MFA wieder entfernen
+- creates the account with a **random password** (255 characters – it is never displayed or stored anywhere, nobody knows it)
+- changes the account name to the unique object ID
+- assigns the Global Administrator role
+- immediately protects the account with **fake MFA**
+- **registers the FIDO2 key** (Windows asks for PIN and touch) and then removes the fake MFA again
 
-Am Ende zeigt eine Zusammenfassung, was erledigt wurde, und das neue Konto wird direkt angezeigt.
+At the end, a summary shows what was done, and the new account is displayed directly.
 
 > [!WARNING]
-> **Danach noch manuell erledigen:**
-> - Den Account von **allen Conditional-Access-Richtlinien ausnehmen**.
-> - Eine **Benachrichtigung bei Anmeldung** einrichten, damit jede Nutzung auffällt.
-> - Den FIDO2-Stick sicher verwahren (z. B. im Tresor).
+> **Then complete manually:**
+> - **Exclude** the account **from all Conditional Access policies**.
+> - Set up a **sign-in alert** so that every use is noticed.
+> - Store the FIDO2 key securely (e.g. in a safe).
 
-Falls die FIDO2-Registrierung fehlschlägt oder abgebrochen wird, bleibt das Konto mit Fake-MFA abgesichert. Der Stick kann später über **„3. Methode konfigurieren → FIDO2 Security Key“** nachgetragen werden.
-
----
-
-## Häufige Fragen und Fehlerbehebung
-
-**Beim Doppelklick auf `Start.cmd` passiert nichts oder es erscheint eine Fehlermeldung.**
-Das Tool läuft nur unter Windows. Wurde der Ordner aus dem Internet, Teams oder einer ZIP-Datei kopiert, sind die Dateien eventuell blockiert. In PowerShell im Ordner einmal ausführen: `Get-ChildItem -Recurse | Unblock-File`.
-
-**Die Anmeldung fragt erneut nach Zustimmung.**
-Das ist normal, wenn eine neue Funktion zusätzliche Berechtigungen braucht – zum Beispiel beim ersten Breakglass-Account.
-
-**Eine neu angelegte oder gelöschte Methode wird nicht sofort angezeigt.**
-Microsoft braucht dafür einige Sekunden. Das Tool wartet automatisch bis zu ca. 16 Sekunden; danach ggf. **„Aktualisieren“** klicken.
-
-**FIDO2: „Fido credential policy …“ oder „nicht aktiviert“.**
-FIDO2 ist im Tenant nicht freigeschaltet. Ein Administrator muss es in den Authentifizierungsmethoden-Richtlinien aktivieren (siehe [Voraussetzungen](#für-administratoren-voraussetzungen-und-berechtigungen)).
-
-**FIDO2: „Der UPN ist zu lang“.**
-Für FIDO2 darf der Anmeldename (UPN) maximal 64 Zeichen haben.
-
-**TOTP-Karte: „Ein Token mit der Seriennummer … ist bereits … zugewiesen“.**
-Die Karte gehört schon einem anderen Benutzer. Dort zuerst entfernen.
-
-**Fehlermeldung mit „Authorization_RequestDenied“ oder „Forbidden“.**
-Dem eigenen Konto fehlt eine Admin-Rolle (siehe [Rollen](#für-administratoren-voraussetzungen-und-berechtigungen)).
-
-Jede Aktion steht mit Uhrzeit im **Protokoll** unten rechts – bei Rückfragen hilft ein Screenshot davon.
+If FIDO2 registration fails or is cancelled, the account stays protected with fake MFA. The key can be added later via **"3. Configure method → FIDO2 security key"**.
 
 ---
 
-## Sicherheit
+## FAQ and troubleshooting
 
-- **Keine Geheimnisse im Protokoll:** TAP, Secrets und Kennwörter werden nie protokolliert oder auf der Festplatte gespeichert.
-- **Unbekannte Kennwörter:** Breakglass-Kennwörter werden zufällig erzeugt und nicht angezeigt.
-- **Sicherheitsabfragen:** Jede Änderung muss bestätigt werden; die Abfragen stehen standardmäßig auf „Nein“.
-- **Aufräumen bei Fehlern:** Schlägt das Einrichten einer TOTP-Karte fehl, entfernt das Tool halb angelegte Einträge automatisch.
+**Double-clicking `Start.cmd` does nothing or shows an error.**
+The tool only runs on Windows. If the folder was copied from the internet, Teams or a ZIP file, the files may be blocked. Run this once in PowerShell inside the folder: `Get-ChildItem -Recurse | Unblock-File`.
+
+**Sign-in asks for consent again.**
+This is normal when a new feature needs additional permissions – for example the first break-glass account.
+
+**A newly created or deleted method does not show up immediately.**
+Microsoft needs a few seconds for this. The tool automatically waits up to approx. 16 seconds; afterwards click **"Refresh"** if needed.
+
+**FIDO2: "Fido credential policy …" or "not enabled".**
+FIDO2 is not enabled in the tenant. An administrator must enable it in the authentication methods policy (see [requirements](#for-administrators-requirements-and-permissions)).
+
+**FIDO2: "The UPN is too long".**
+FIDO2 allows a maximum of 64 characters for the sign-in name (UPN).
+
+**TOTP card: "A token with serial number … is already assigned to …".**
+The card already belongs to another user. Remove it there first.
+
+**Error message with "Authorization_RequestDenied" or "Forbidden".**
+Your account is missing an admin role (see [roles](#for-administrators-requirements-and-permissions)).
+
+Every action is listed with its time in the **log** at the bottom right – a screenshot of it helps with questions.
+
+---
+
+## Security
+
+- **No secrets in the log:** TAPs, secrets and passwords are never logged or saved to disk.
+- **Unknown passwords:** Break-glass passwords are generated randomly and never displayed.
+- **Confirmation prompts:** Every change must be confirmed; the prompts default to "No".
+- **Clean-up on errors:** If setting up a TOTP card fails, the tool automatically removes half-created entries.
 
 > [!CAUTION]
-> Administrative Aktionen nur gemäß dem internen Freigabe- und Sicherheitsprozess durchführen.
+> Only perform administrative actions in accordance with your internal approval and security process.
 
 ---
 
-## Für Administratoren: Voraussetzungen und Berechtigungen
+## For administrators: requirements and permissions
 
-### Systemvoraussetzungen
+### System requirements
 
-- Windows mit **Windows PowerShell 5.1** (vorinstalliert; PowerShell 7 wird nicht unterstützt, da die Oberfläche WPF nutzt)
-- Internetzugang beim ersten Start zur Installation der PowerShell-Module (nur für den aktuellen Benutzer, keine Adminrechte nötig):
+- Windows with **Windows PowerShell 5.1** (preinstalled; PowerShell 7 is not supported because the interface uses WPF)
+- Internet access on first start to install the PowerShell modules (for the current user only, no admin rights required):
   - `Microsoft.Graph.Authentication`
-  - `Microsoft.Graph.Identity.SignIns` und `DSInternals.Passkeys` **1.0.6** (FIDO2)
-  - `QRCodeGenerator` (QR-Codes für programmierbare TOTP-Karten)
+  - `Microsoft.Graph.Identity.SignIns` and `DSInternals.Passkeys` **1.0.6** (FIDO2)
+  - `QRCodeGenerator` (QR codes for programmable TOTP cards)
 
-  Alternativ vorab installieren mit `Install-Prerequisites.ps1`.
-- Für FIDO2 muss der Stick **am lokalen Rechner** angeschlossen sein (über RDP nur mit WebAuthn-Umleitung).
+  Alternatively, install them in advance with `Install-Prerequisites.ps1`.
+- For FIDO2, the key must be connected to the **local computer** (via RDP only with WebAuthn redirection).
 
-### Graph-Berechtigungen (delegiert)
+### Graph permissions (delegated)
 
-Bei der Anmeldung:
+At sign-in:
 
-| Berechtigung | Wofür |
+| Permission | Purpose |
 |---|---|
-| `User.Read.All` | Benutzer suchen |
-| `UserAuthenticationMethod.Read.All` | MFA-Methoden anzeigen |
-| `UserAuthenticationMethod.ReadWrite.All` | MFA-Methoden einrichten und löschen |
-| `Policy.ReadWrite.AuthenticationMethod` | TOTP-Karten und Fake-MFA im Token-Inventar anlegen/löschen |
-| `RoleManagement.Read.Directory` | Admin-Rollen eines Benutzers anzeigen |
+| `User.Read.All` | Find users |
+| `UserAuthenticationMethod.Read.All` | Show MFA methods |
+| `UserAuthenticationMethod.ReadWrite.All` | Set up and delete MFA methods |
+| `Policy.ReadWrite.AuthenticationMethod` | Create/delete TOTP cards and fake MFA in the token inventory |
+| `RoleManagement.Read.Directory` | Show a user's admin roles |
 
-Zusätzlich beim ersten Breakglass-Account:
+Additionally for the first break-glass account:
 
-| Berechtigung | Wofür |
+| Permission | Purpose |
 |---|---|
-| `User.ReadWrite.All` | Benutzer anlegen |
-| `Domain.Read.All` | Domains zur Auswahl anzeigen |
-| `RoleManagement.ReadWrite.Directory` | Global Administrator zuweisen |
+| `User.ReadWrite.All` | Create users |
+| `Domain.Read.All` | Show domains for selection |
+| `RoleManagement.ReadWrite.Directory` | Assign Global Administrator |
 
-### Benötigte Entra-Rollen des eigenen Kontos
+### Required Entra roles for your own account
 
-| Aufgabe | Rolle |
+| Task | Role |
 |---|---|
-| Methoden normaler Benutzer verwalten, TAP | **Authentication Administrator** |
-| Methoden von Administratoren verwalten | **Privileged Authentication Administrator** |
-| TOTP-Karten und Fake-MFA | zusätzlich **Authentication Policy Administrator** |
-| Breakglass-Account | **Global Administrator** (oder Privileged Role Administrator + User Administrator) |
+| Manage methods of regular users, TAP | **Authentication Administrator** |
+| Manage methods of administrators | **Privileged Authentication Administrator** |
+| TOTP cards and fake MFA | additionally **Authentication Policy Administrator** |
+| Break-glass account | **Global Administrator** (or Privileged Role Administrator + User Administrator) |
 
-### Tenant-Einstellungen
+### Tenant settings
 
-In den **Authentifizierungsmethoden-Richtlinien** (Entra Admin Center → Schutz → Authentifizierungsmethoden) müssen die genutzten Methoden aktiviert sein:
+In the **authentication methods policy** (Entra admin center → Protection → Authentication methods), the methods used must be enabled:
 
 - **Passkey (FIDO2)**
-- **Hardware-OATH-Token** (für TOTP-Karten und Fake-MFA)
-- **Temporary Access Pass** – maximale Gültigkeit mindestens 2 Stunden
+- **Hardware OATH tokens** (for TOTP cards and fake MFA)
+- **Temporary Access Pass** – maximum lifetime at least 2 hours
 
-### Hinweise
+### Notes
 
-- Einige Funktionen nutzen die **Beta-Schnittstelle** von Microsoft Graph (u. a. für Hardware-OATH-Token). Diese kann sich ändern.
-- PIM-berechtigte Rollen werden nur mit Entra ID P2 angezeigt.
+- Some features use the **beta API** of Microsoft Graph (e.g. for hardware OATH tokens), which may change.
+- PIM-eligible roles are only shown with Entra ID P2.
+- The selected language is stored in `%APPDATA%\M365MfaTool\settings.json`.
 
 ---
 
-## Aufbau des Projekts
+## Project structure
 
-| Datei | Inhalt |
+| File | Content |
 |---|---|
-| `Start.cmd` | Starter per Doppelklick |
-| `Start-M365MfaTool.ps1` | Oberfläche, Zustandsverwaltung und Ereignisse |
-| `UI/MainWindow.xaml` | Layout des Hauptfensters |
-| `UI/BreakGlassDialog.xaml` | Dialog für neue Breakglass-Accounts |
-| `Modules/Graph.psm1` | Anmeldung, Graph-Anfragen, Benutzer, Domains, Rollen, MFA-Ampel, Lesen/Löschen von Methoden |
-| `Modules/Provisioning.psm1` | Einrichtung von FIDO2, TOTP-Karten, Fake-MFA, TAP und Breakglass-Accounts |
-| `Modules/Localization.psm1` | Mehrsprachigkeit: lädt die Sprachdateien und liefert die Texte |
-| `Languages/*.json` | Texte je Sprache (`en.json` ist die Referenz) |
-| `Install-Prerequisites.ps1` | Optionale Vorabinstallation aller Module |
-| `docs/` | Screenshots für diese Dokumentation |
+| `Start.cmd` | Launcher for double-click |
+| `Start-M365MfaTool.ps1` | User interface, state management and events |
+| `UI/MainWindow.xaml` | Main window layout |
+| `UI/BreakGlassDialog.xaml` | Dialog for new break-glass accounts |
+| `Modules/Graph.psm1` | Sign-in, Graph requests, users, domains, roles, MFA traffic light, reading/deleting methods |
+| `Modules/Provisioning.psm1` | Setup of FIDO2, TOTP cards, fake MFA, TAP and break-glass accounts |
+| `Modules/Localization.psm1` | Localization: loads the language files and provides the texts |
+| `Languages/*.json` | Texts per language (`en.json` is the reference) |
+| `Install-Prerequisites.ps1` | Optional advance installation of all modules |
+| `docs/` | Translated documentation and screenshots |
 
-## Weitere Sprache hinzufügen
+---
 
-1. `Languages/en.json` kopieren und nach dem Sprachcode benennen, z. B. `sv.json` für Schwedisch.
-2. `"_language"` auf den Namen der Sprache in der Sprache selbst setzen (z. B. `"Svenska"`) und alle Texte übersetzen. Platzhalter wie `{0}` müssen erhalten bleiben.
-3. Das Tool neu starten – die Sprache erscheint automatisch in der Auswahl. Fehlende Texte werden auf Englisch angezeigt.
+## Adding a language
+
+1. Copy `Languages/en.json` and name it after the language code, e.g. `sv.json` for Swedish.
+2. Set `"_language"` to the name of the language in that language (e.g. `"Svenska"`) and translate all texts. Placeholders such as `{0}` must be kept.
+3. Restart the tool – the language appears automatically in the selection. Missing texts are shown in English.
+4. Optional: add a translated documentation as `docs/README.<code>.md` and link it in the language bar at the top of all README files.
