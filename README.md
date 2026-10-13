@@ -153,6 +153,8 @@ If FIDO2 registration fails or is cancelled, the account stays protected with fa
 
 Click **"MFA report …"** in the top left to check the MFA status of **all users of the tenant** (or of the members of a group, incl. nested groups) at once.
 
+![Tenant MFA status report](docs/images/en/tenant-report.png)
+
 1. Choose the scope: **All users** or **Members of a group** (find the group by the beginning of its name or by object ID). By default, only enabled accounts and no guest accounts are included.
 2. Click **"Create report"**. The list fills up while the methods are being read (20 users per Graph request). **"Cancel"** stops after the current block.
 3. The tiles show the number per traffic light color – **clicking a tile filters** the list. In addition, you can **search** (name, UPN, email, roles, methods, rating, department) and show **administrators only**.
@@ -194,6 +196,9 @@ The card already belongs to another user. Remove it there first.
 Your account is missing an admin role (see [roles](#for-administrators-requirements-and-permissions)).
 
 Every action is listed with its time in the **log** at the bottom right. It is also saved immediately to a daily log file in the tool folder, e.g. `Logs\2026-10-12.log` (if the folder is not writable: `%LOCALAPPDATA%\M365MfaTool\Logs`) – helpful for questions.
+
+**MFA report: the last sign-in columns are empty.**
+This requires an **Entra ID P1/P2** license, the `AuditLog.Read.All` permission and a role that may read sign-in data (e.g. **Reports Reader**). Without them, the report is still created, just without this information; the log shows the reason.
 
 ---
 

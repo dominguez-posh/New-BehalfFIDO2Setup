@@ -16,6 +16,7 @@ Con questo strumento, amministratori e help desk configurano l'**autenticazione 
 - [Guida passo per passo](#guida-passo-per-passo)
 - [Quale metodo scegliere](#quale-metodo-scegliere)
 - [Creare un account di emergenza](#creare-un-account-di-emergenza)
+- [Report MFA del tenant](#report-mfa-del-tenant)
 - [Domande frequenti e risoluzione dei problemi](#domande-frequenti-e-risoluzione-dei-problemi)
 - [Sicurezza](#sicurezza)
 - [Requisiti e autorizzazioni per gli amministratori](#requisiti-e-autorizzazioni-per-gli-amministratori)
@@ -33,6 +34,7 @@ Con questo strumento, amministratori e help desk configurano l'**autenticazione 
 | 👑 | **Ruoli di amministratore** – mostra se l'utente ha diritti amministrativi |
 | 📋 | **Visualizzare ed eliminare metodi MFA** – tutti i metodi registrati con data e dettagli |
 | ➕ | **Configurare metodi** – chiave FIDO2, schede TOTP, Temporary Access Pass e MFA fittizia |
+| 📊 | **Report MFA del tenant** – stato MFA e ultimo accesso di tutti gli utenti come semaforo, con ricerca, filtri ed esportazione Excel a colori |
 | 🆘 | **Account di emergenza** – creare un accesso di emergenza (break-glass) con chiave FIDO2 e password sconosciuta |
 | 🌐 | **Multilingue** – inglese (predefinito), tedesco, spagnolo, francese, italiano, portoghese, olandese e polacco |
 
@@ -150,6 +152,29 @@ Se la registrazione FIDO2 non riesce o viene annullata, l'account resta protetto
 
 ---
 
+## Report MFA del tenant
+
+Fare clic su **"Report MFA …"** in alto a sinistra per verificare in un colpo solo lo stato MFA di **tutti gli utenti del tenant** (o dei membri di un gruppo, inclusi i gruppi annidati).
+
+![Report stato MFA del tenant](images/en/tenant-report.png)
+
+1. Scegliere l'ambito: **"Tutti gli utenti"** oppure **"Membri di un gruppo (inclusi gruppi annidati)"** (cercare il gruppo tramite l'inizio del nome o l'ID oggetto). Per impostazione predefinita vengono considerati solo gli account abilitati e nessun account guest.
+2. Fare clic su **"Crea report"**. L'elenco si riempie mentre vengono letti i metodi (20 utenti per richiesta Graph). **"Annulla"** si interrompe dopo il blocco corrente.
+3. I riquadri mostrano il numero per colore del semaforo – **un clic su un riquadro filtra** l'elenco. Inoltre è possibile **cercare** (nome, UPN, e-mail, ruoli, metodi, valutazione, reparto) e mostrare **"Solo amministratori"**.
+   Le colonne **"Ultimo accesso"** e **"Giorni da"** mostrano se un account viene effettivamente usato. Gli account senza accesso da oltre 90 giorni o che non hanno mai effettuato l'accesso sono evidenziati in rosso, conteggiati in un riquadro dedicato e possono essere mostrati con **"Solo inattivi (> 90 giorni o mai)"**.
+4. **"Esporta in Excel …"** salva le voci attualmente visualizzate come file `.xlsx` nei colori del semaforo, con un foglio di riepilogo. Non servono né Excel né moduli aggiuntivi.
+5. Un **doppio clic** su un utente chiude il report e apre l'utente nella finestra principale per la modifica. Il report resta disponibile fino alla disconnessione.
+
+| Semaforo | Significato |
+|---|---|
+| 🔴 **Rosso** | Nessuna MFA (solo password), **oppure** ruolo amministrativo con sola MFA non sicura (SMS/chiamata, TAP o MFA fittizia) |
+| 🟡 **Giallo** | Solo MFA non sicura (SMS/chiamata, TAP o MFA fittizia), **oppure** amministratore senza MFA resistente al phishing (FIDO2, passkey, Windows Hello) |
+| 🟢 **Verde** | MFA forte – per gli amministratori resistente al phishing |
+
+Come ruoli amministrativi contano i ruoli attivi e quelli idonei tramite PIM (contrassegnati con "(PIM)"), nonché i ruoli assegnati tramite gruppi.
+
+---
+
 ## Domande frequenti e risoluzione dei problemi
 
 **Il doppio clic su `Start.cmd` non fa nulla o mostra un errore.**
@@ -174,6 +199,9 @@ La scheda appartiene già a un altro utente. Rimuoverla prima da lì.
 Al proprio account manca un ruolo di amministratore (vedi [ruoli](#requisiti-e-autorizzazioni-per-gli-amministratori)).
 
 Ogni azione è riportata con l'ora nel **log** in basso a destra. Viene inoltre salvata subito in un file di log giornaliero nella cartella dello strumento, ad es. `Logs\2026-10-12.log` (se la cartella non è scrivibile: `%LOCALAPPDATA%\M365MfaTool\Logs`) – utile in caso di domande.
+
+**Report MFA: le colonne dell'ultimo accesso sono vuote.**
+Servono una licenza **Entra ID P1/P2**, l'autorizzazione `AuditLog.Read.All` e un ruolo che possa leggere i dati di accesso (ad es. **Lettore report**). In caso contrario il report viene comunque creato, ma senza queste informazioni; il log ne indica il motivo.
 
 ---
 
@@ -222,6 +250,15 @@ In aggiunta, al primo account di emergenza:
 | `Domain.Read.All` | Mostrare i domini da selezionare |
 | `RoleManagement.ReadWrite.Directory` | Assegnare Global Administrator |
 
+Inoltre, per il report MFA:
+
+| Autorizzazione | A cosa serve |
+|---|---|
+| `GroupMember.Read.All` | Scegliere un gruppo come ambito, risolvere i ruoli di amministratore assegnati tramite gruppi |
+| `AuditLog.Read.All` | Ultimo accesso (facoltativo – senza, il report viene creato senza questa colonna) |
+
+L'ultimo accesso richiede inoltre una licenza **Entra ID P1/P2** e un ruolo che possa leggere i dati di accesso, ad es. **Lettore report**, **Lettore sicurezza** o **Lettore globale**. Viene mostrato l'ultimo accesso riuscito (interattivo o non interattivo); Microsoft lo registra da dicembre 2023, i valori precedenti corrispondono all'ultimo tentativo di accesso.
+
 ### Ruoli Entra necessari per il proprio account
 
 | Attività | Ruolo |
@@ -255,8 +292,11 @@ Nei **criteri dei metodi di autenticazione** (Interfaccia di amministrazione di 
 | `Start-M365MfaTool.ps1` | Interfaccia, gestione dello stato ed eventi |
 | `UI/MainWindow.xaml` | Layout della finestra principale |
 | `UI/BreakGlassDialog.xaml` | Finestra per i nuovi account di emergenza |
+| `UI/TenantReportWindow.xaml` | Finestra del report MFA |
 | `Modules/Graph.psm1` | Accesso, richieste Graph, utenti, domini, ruoli, semaforo MFA, lettura/eliminazione dei metodi |
 | `Modules/Provisioning.psm1` | Configurazione di FIDO2, schede TOTP, MFA fittizia, TAP e account di emergenza |
+| `Modules/TenantReport.psm1` | Report MFA: utenti, ruoli, richieste di metodi raggruppate, valutazione a semaforo, esportazione Excel |
+| `Modules/Xlsx.psm1` | Writer Excel leggero (.xlsx senza Excel né moduli aggiuntivi) |
 | `Modules/Localization.psm1` | Multilingua: carica i file di lingua e fornisce i testi |
 | `Languages/*.json` | Testi per lingua (`en.json` è il riferimento) |
 | `Install-Prerequisites.ps1` | Installazione preliminare facoltativa di tutti i moduli |

@@ -153,6 +153,8 @@ Falls die FIDO2-Registrierung fehlschlägt oder abgebrochen wird, bleibt das Kon
 
 Über **„MFA-Report …“** oben links prüfen Sie den MFA-Status **aller Benutzer des Tenants** (oder der Mitglieder einer Gruppe inkl. verschachtelter Gruppen) auf einen Blick.
 
+![MFA-Status-Report für den Tenant](images/de/tenant-report.png)
+
 1. Umfang wählen: **Alle Benutzer** oder **Mitglieder einer Gruppe** (Gruppe über den Namensanfang oder die Objekt-ID suchen). Standardmäßig werden nur aktivierte Konten und keine Gastkonten berücksichtigt.
 2. **„Report erstellen“** klicken. Die Liste füllt sich, während die Methoden gelesen werden (20 Benutzer je Graph-Anfrage). **„Abbrechen“** stoppt nach dem aktuellen Block.
 3. Die Kacheln zeigen die Anzahl je Ampelfarbe – **ein Klick auf eine Kachel filtert** die Liste. Zusätzlich können Sie **suchen** (Name, UPN, E-Mail, Rollen, Methoden, Bewertung, Abteilung) und **nur Administratoren** anzeigen.
@@ -194,6 +196,9 @@ Die Karte gehört schon einem anderen Benutzer. Dort zuerst entfernen.
 Dem eigenen Konto fehlt eine Admin-Rolle (siehe [Rollen](#für-administratoren-voraussetzungen-und-berechtigungen)).
 
 Jede Aktion steht mit Uhrzeit im **Protokoll** unten rechts. Zusätzlich wird sie sofort in eine tägliche Protokolldatei im Tool-Ordner geschrieben, z. B. `Logs\2026-10-12.log` (falls der Ordner nicht beschreibbar ist: `%LOCALAPPDATA%\M365MfaTool\Logs`) – hilfreich bei Rückfragen.
+
+**MFA-Report: Die Spalten zur letzten Anmeldung sind leer.**
+Dafür sind eine **Entra ID P1/P2**-Lizenz, die Berechtigung `AuditLog.Read.All` und eine Rolle nötig, die Anmeldedaten lesen darf (z. B. **Berichtsleser**). Ohne diese wird der Report trotzdem erstellt, nur ohne diese Angaben; im Protokoll steht der Grund.
 
 ---
 

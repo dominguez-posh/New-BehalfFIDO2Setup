@@ -1103,8 +1103,6 @@ function Connect-ReportView {
     # Own view per window and collection: sorted red -> yellow -> green, filtered by tile, admins, inactivity and search.
     $r = $script:Rpt
     $view = [System.Windows.Data.ListCollectionView]::new($script:ReportData.Rows)
-    $view.SortDescriptions.Add((New-Object System.ComponentModel.SortDescription 'LevelOrder', 'Ascending'))
-    $view.SortDescriptions.Add((New-Object System.ComponentModel.SortDescription 'DisplayName', 'Ascending'))
     $view.Filter = [Predicate[object]]{
         param($row)
         $state = $script:Rpt
@@ -1116,6 +1114,9 @@ function Connect-ReportView {
     }
     $r.View = $view
     $r.DgRpt.ItemsSource = $view
+    # Only after ItemsSource: a visible DataGrid clears the sort order when its ItemsSource changes.
+    $view.SortDescriptions.Add((New-Object System.ComponentModel.SortDescription 'LevelOrder', 'Ascending'))
+    $view.SortDescriptions.Add((New-Object System.ComponentModel.SortDescription 'DisplayName', 'Ascending'))
     Update-ReportCounts
 }
 

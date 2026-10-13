@@ -16,6 +16,7 @@ Avec cet outil, les administrateurs et le support informatique configurent **l'a
 - [Guide pas à pas](#guide-pas-à-pas)
 - [Choisir la bonne méthode](#choisir-la-bonne-méthode)
 - [Créer un compte d'urgence](#créer-un-compte-durgence)
+- [Rapport MFA du locataire](#rapport-mfa-du-locataire)
 - [Questions fréquentes et dépannage](#questions-fréquentes-et-dépannage)
 - [Sécurité](#sécurité)
 - [Prérequis et autorisations pour les administrateurs](#prérequis-et-autorisations-pour-les-administrateurs)
@@ -33,6 +34,7 @@ Avec cet outil, les administrateurs et le support informatique configurent **l'a
 | 👑 | **Rôles d'administration** – indique si l'utilisateur dispose de droits administratifs |
 | 📋 | **Afficher et supprimer les méthodes MFA** – toutes les méthodes enregistrées avec date et détails |
 | ➕ | **Configurer des méthodes** – clé FIDO2, cartes TOTP, Temporary Access Pass et MFA fictive |
+| 📊 | **Rapport MFA du locataire** – statut MFA et dernière connexion de tous les utilisateurs en feu tricolore, avec recherche, filtres et export Excel en couleur |
 | 🆘 | **Compte d'urgence** – créer un accès d'urgence (break-glass) avec clé FIDO2 et mot de passe inconnu |
 | 🌐 | **Multilingue** – anglais (par défaut), allemand, espagnol, français, italien, portugais, néerlandais et polonais |
 
@@ -150,6 +152,29 @@ Si l'enregistrement FIDO2 échoue ou est annulé, le compte reste protégé par 
 
 ---
 
+## Rapport MFA du locataire
+
+Cliquez sur **"Rapport MFA …"** en haut à gauche pour vérifier en une fois le statut MFA de **tous les utilisateurs du locataire** (ou des membres d'un groupe, y compris les groupes imbriqués).
+
+![Rapport d'état MFA du locataire](images/en/tenant-report.png)
+
+1. Choisissez le périmètre : **"Tous les utilisateurs"** ou **"Membres d'un groupe (y compris groupes imbriqués)"** (recherchez le groupe par le début de son nom ou par son ID d'objet). Par défaut, seuls les comptes activés sont pris en compte, sans comptes invités.
+2. Cliquez sur **"Créer le rapport"**. La liste se remplit pendant la lecture des méthodes (20 utilisateurs par requête Graph). **"Annuler"** s'arrête après le bloc en cours.
+3. Les vignettes affichent le nombre par couleur du feu tricolore – **un clic sur une vignette filtre** la liste. Vous pouvez en outre **rechercher** (nom, UPN, e-mail, rôles, méthodes, évaluation, service) et afficher **"Administrateurs uniquement"**.
+   Les colonnes **"Dernière connexion"** et **"Jours depuis"** indiquent si un compte est réellement utilisé. Les comptes sans connexion depuis plus de 90 jours ou jamais connectés sont mis en évidence en rouge, comptés dans une vignette dédiée et peuvent être affichés avec **"Inactifs uniquement (> 90 jours ou jamais)"**.
+4. **"Export Excel …"** enregistre les entrées actuellement affichées dans un fichier `.xlsx` aux couleurs du feu tricolore, avec une feuille de synthèse. Ni Excel ni module supplémentaire ne sont nécessaires.
+5. Un **double-clic** sur un utilisateur ferme le rapport et ouvre l'utilisateur dans la fenêtre principale pour le modifier. Le rapport est conservé jusqu'à la déconnexion.
+
+| Feu | Signification |
+|---|---|
+| 🔴 **Rouge** | Pas de MFA (mot de passe uniquement), **ou** rôle d'administration avec uniquement une MFA non sécurisée (SMS/appel, TAP ou fausse MFA) |
+| 🟡 **Jaune** | Uniquement une MFA non sécurisée (SMS/appel, TAP ou fausse MFA), **ou** administrateur sans MFA résistante au phishing (FIDO2, passkey, Windows Hello) |
+| 🟢 **Vert** | MFA forte – résistante au phishing pour les administrateurs |
+
+Sont considérés comme rôles d'administration les rôles actifs et éligibles via PIM (marqués « (PIM) ») ainsi que les rôles attribués via des groupes.
+
+---
+
 ## Questions fréquentes et dépannage
 
 **Un double-clic sur `Start.cmd` ne fait rien ou affiche une erreur.**
@@ -174,6 +199,9 @@ La carte appartient déjà à un autre utilisateur. Retirez-la d'abord chez celu
 Il manque un rôle d'administration à votre compte (voir [rôles](#prérequis-et-autorisations-pour-les-administrateurs)).
 
 Chaque action figure avec son heure dans le **journal** en bas à droite. Elle est aussi enregistrée immédiatement dans un fichier journal quotidien du dossier de l'outil, p. ex. `Logs\2026-10-12.log` (si le dossier n'est pas accessible en écriture : `%LOCALAPPDATA%\M365MfaTool\Logs`) – utile en cas de question.
+
+**Rapport MFA : les colonnes de dernière connexion sont vides.**
+Il faut pour cela une licence **Entra ID P1/P2**, l'autorisation `AuditLog.Read.All` et un rôle autorisé à lire les données de connexion (p. ex. **Lecteur de rapports**). Sans cela, le rapport est quand même créé, mais sans ces informations ; le journal en indique la raison.
 
 ---
 
@@ -222,6 +250,15 @@ En plus, lors du premier compte d'urgence :
 | `Domain.Read.All` | Afficher les domaines à sélectionner |
 | `RoleManagement.ReadWrite.Directory` | Attribuer Global Administrator |
 
+En plus, pour le rapport MFA :
+
+| Autorisation | Utilisation |
+|---|---|
+| `GroupMember.Read.All` | Choisir un groupe comme périmètre, résoudre les rôles d'administration attribués via des groupes |
+| `AuditLog.Read.All` | Dernière connexion (facultatif – sans elle, le rapport est créé sans cette colonne) |
+
+La dernière connexion nécessite en outre une licence **Entra ID P1/P2** et un rôle autorisé à lire les données de connexion, p. ex. **Lecteur de rapports**, **Lecteur de sécurité** ou **Lecteur général**. C'est la dernière connexion réussie (interactive ou non interactive) qui est affichée ; Microsoft l'enregistre depuis décembre 2023, les valeurs plus anciennes correspondent à la dernière tentative de connexion.
+
 ### Rôles Entra nécessaires pour votre propre compte
 
 | Tâche | Rôle |
@@ -255,8 +292,11 @@ Dans la **stratégie des méthodes d'authentification** (Centre d'administration
 | `Start-M365MfaTool.ps1` | Interface, gestion de l'état et événements |
 | `UI/MainWindow.xaml` | Disposition de la fenêtre principale |
 | `UI/BreakGlassDialog.xaml` | Boîte de dialogue pour les nouveaux comptes d'urgence |
+| `UI/TenantReportWindow.xaml` | Fenêtre du rapport MFA |
 | `Modules/Graph.psm1` | Connexion, requêtes Graph, utilisateurs, domaines, rôles, feu tricolore MFA, lecture/suppression des méthodes |
 | `Modules/Provisioning.psm1` | Configuration de FIDO2, cartes TOTP, MFA fictive, TAP et comptes d'urgence |
+| `Modules/TenantReport.psm1` | Rapport MFA : utilisateurs, rôles, requêtes de méthodes groupées, évaluation en feu tricolore, export Excel |
+| `Modules/Xlsx.psm1` | Générateur Excel léger (.xlsx sans Excel ni module supplémentaire) |
 | `Modules/Localization.psm1` | Multilinguisme : charge les fichiers de langue et fournit les textes |
 | `Languages/*.json` | Textes par langue (`en.json` est la référence) |
 | `Install-Prerequisites.ps1` | Installation préalable facultative de tous les modules |

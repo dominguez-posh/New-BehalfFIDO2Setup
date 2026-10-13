@@ -16,6 +16,7 @@ Met deze tool richten beheerders en helpdeskmedewerkers **meervoudige verificati
 - [Stap voor stap](#stap-voor-stap)
 - [Welke methode kiezen](#welke-methode-kiezen)
 - [Een noodaccount aanmaken](#een-noodaccount-aanmaken)
+- [MFA-rapport voor de tenant](#mfa-rapport-voor-de-tenant)
 - [Veelgestelde vragen en probleemoplossing](#veelgestelde-vragen-en-probleemoplossing)
 - [Beveiliging](#beveiliging)
 - [Vereisten en machtigingen voor beheerders](#vereisten-en-machtigingen-voor-beheerders)
@@ -33,6 +34,7 @@ Met deze tool richten beheerders en helpdeskmedewerkers **meervoudige verificati
 | 👑 | **Beheerdersrollen** – toont of de gebruiker beheerdersrechten heeft |
 | 📋 | **MFA-methoden bekijken en verwijderen** – alle geregistreerde methoden met datum en details |
 | ➕ | **Methoden inrichten** – FIDO2-sleutel, TOTP-kaarten, Temporary Access Pass en nep-MFA |
+| 📊 | **MFA-rapport voor de tenant** – MFA-status en laatste aanmelding van alle gebruikers als stoplicht, met zoeken, filters en Excel-export in kleur |
 | 🆘 | **Noodaccount** – een noodtoegang (break-glass) met FIDO2-sleutel en onbekend wachtwoord aanmaken |
 | 🌐 | **Meertalig** – Engels (standaard), Duits, Spaans, Frans, Italiaans, Portugees, Nederlands en Pools |
 
@@ -150,6 +152,29 @@ Als de FIDO2-registratie mislukt of wordt geannuleerd, blijft het account beveil
 
 ---
 
+## MFA-rapport voor de tenant
+
+Klik linksboven op **"MFA-rapport …"** om in één keer de MFA-status van **alle gebruikers van de tenant** (of van de leden van een groep, incl. geneste groepen) te controleren.
+
+![MFA-statusrapport voor de tenant](images/en/tenant-report.png)
+
+1. Kies het bereik: **"Alle gebruikers"** of **"Leden van een groep (incl. geneste groepen)"** (zoek de groep op het begin van de naam of op object-ID). Standaard worden alleen ingeschakelde accounts en geen gastaccounts meegenomen.
+2. Klik op **"Rapport maken"**. De lijst vult zich terwijl de methoden worden gelezen (20 gebruikers per Graph-aanvraag). **"Annuleren"** stopt na het huidige blok.
+3. De tegels tonen het aantal per stoplichtkleur – **klikken op een tegel filtert** de lijst. Daarnaast kunt u **zoeken** (naam, UPN, e-mail, rollen, methoden, beoordeling, afdeling) en **"Alleen beheerders"** tonen.
+   De kolommen **"Laatste aanmelding"** en **"Dagen sinds"** laten zien of een account echt wordt gebruikt. Accounts zonder aanmelding in meer dan 90 dagen of die zich nooit hebben aangemeld, worden rood gemarkeerd, in een eigen tegel geteld en kunnen met **"Alleen inactief (> 90 dagen of nooit)"** worden getoond.
+4. **"Excel-export …"** slaat de op dat moment getoonde items op als `.xlsx`-bestand in stoplichtkleuren, inclusief een samenvattingsblad. Excel of een extra module is niet nodig.
+5. **Dubbelklikken** op een gebruiker sluit het rapport en opent de gebruiker in het hoofdvenster om te bewerken. Het rapport blijft bewaard tot u zich afmeldt.
+
+| Stoplicht | Betekenis |
+|---|---|
+| 🔴 **Rood** | Geen MFA (alleen wachtwoord), **of** beheerdersrol met alleen onveilige MFA (sms/oproep, TAP of nep-MFA) |
+| 🟡 **Geel** | Alleen onveilige MFA (sms/oproep, TAP of nep-MFA), **of** beheerder zonder phishingbestendige MFA (FIDO2, passkey, Windows Hello) |
+| 🟢 **Groen** | Sterke MFA – voor beheerders phishingbestendig |
+
+Als beheerdersrollen tellen actieve rollen en rollen die via PIM in aanmerking komen (gemarkeerd met "(PIM)"), en ook rollen die via groepen zijn toegewezen.
+
+---
+
 ## Veelgestelde vragen en probleemoplossing
 
 **Dubbelklikken op `Start.cmd` doet niets of geeft een foutmelding.**
@@ -174,6 +199,9 @@ De kaart hoort al bij een andere gebruiker. Verwijder deze daar eerst.
 Uw account mist een beheerdersrol (zie [rollen](#vereisten-en-machtigingen-voor-beheerders)).
 
 Elke actie staat met tijdstip in het **logboek** rechtsonder. Daarnaast wordt deze direct opgeslagen in een dagelijks logbestand in de toolmap, bijv. `Logs\2026-10-12.log` (als de map niet beschrijfbaar is: `%LOCALAPPDATA%\M365MfaTool\Logs`) – handig bij vragen.
+
+**MFA-rapport: de kolommen voor de laatste aanmelding zijn leeg.**
+Daarvoor zijn een **Entra ID P1/P2**-licentie, de machtiging `AuditLog.Read.All` en een rol die aanmeldgegevens mag lezen (bijv. **Rapportlezer**) nodig. Zonder deze wordt het rapport toch gemaakt, alleen zonder deze gegevens; het logboek vermeldt de reden.
 
 ---
 
@@ -222,6 +250,15 @@ Daarnaast bij het eerste noodaccount:
 | `Domain.Read.All` | Domeinen ter selectie tonen |
 | `RoleManagement.ReadWrite.Directory` | Global Administrator toewijzen |
 
+Daarnaast voor het MFA-rapport:
+
+| Machtiging | Waarvoor |
+|---|---|
+| `GroupMember.Read.All` | Een groep als bereik kiezen, beheerdersrollen die via groepen zijn toegewezen ophalen |
+| `AuditLog.Read.All` | Laatste aanmelding (optioneel – zonder wordt het rapport zonder deze kolom gemaakt) |
+
+Voor de laatste aanmelding zijn daarnaast een **Entra ID P1/P2**-licentie en een rol nodig die aanmeldgegevens mag lezen, bijv. **Rapportlezer**, **Beveiligingslezer** of **Globale lezer**. Getoond wordt de laatste geslaagde aanmelding (interactief of niet-interactief); Microsoft registreert deze sinds december 2023, oudere waarden zijn de laatste aanmeldpoging.
+
 ### Benodigde Entra-rollen voor uw eigen account
 
 | Taak | Rol |
@@ -255,8 +292,11 @@ In het **beleid voor verificatiemethoden** (Entra-beheercentrum → Beveiliging 
 | `Start-M365MfaTool.ps1` | Interface, statusbeheer en gebeurtenissen |
 | `UI/MainWindow.xaml` | Indeling van het hoofdvenster |
 | `UI/BreakGlassDialog.xaml` | Dialoogvenster voor nieuwe noodaccounts |
+| `UI/TenantReportWindow.xaml` | Venster van het MFA-rapport |
 | `Modules/Graph.psm1` | Aanmelden, Graph-aanvragen, gebruikers, domeinen, rollen, MFA-stoplicht, methoden lezen/verwijderen |
 | `Modules/Provisioning.psm1` | Inrichten van FIDO2, TOTP-kaarten, nep-MFA, TAP en noodaccounts |
+| `Modules/TenantReport.psm1` | MFA-rapport: gebruikers, rollen, gebundelde methode-aanvragen, stoplichtbeoordeling, Excel-export |
+| `Modules/Xlsx.psm1` | Eenvoudige Excel-writer (.xlsx zonder Excel of extra modules) |
 | `Modules/Localization.psm1` | Meertaligheid: laadt de taalbestanden en levert de teksten |
 | `Languages/*.json` | Teksten per taal (`en.json` is de referentie) |
 | `Install-Prerequisites.ps1` | Optionele voorafgaande installatie van alle modules |

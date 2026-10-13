@@ -16,6 +16,7 @@ To narzędzie pozwala administratorom i pracownikom helpdesku konfigurować **uw
 - [Instrukcja krok po kroku](#instrukcja-krok-po-kroku)
 - [Którą metodę wybrać](#którą-metodę-wybrać)
 - [Tworzenie konta awaryjnego](#tworzenie-konta-awaryjnego)
+- [Raport MFA dzierżawy](#raport-mfa-dzierżawy)
 - [Często zadawane pytania i rozwiązywanie problemów](#często-zadawane-pytania-i-rozwiązywanie-problemów)
 - [Bezpieczeństwo](#bezpieczeństwo)
 - [Wymagania i uprawnienia dla administratorów](#wymagania-i-uprawnienia-dla-administratorów)
@@ -33,6 +34,7 @@ To narzędzie pozwala administratorom i pracownikom helpdesku konfigurować **uw
 | 👑 | **Role administratora** – pokazuje, czy użytkownik ma uprawnienia administracyjne |
 | 📋 | **Przeglądanie i usuwanie metod MFA** – wszystkie zarejestrowane metody z datą i szczegółami |
 | ➕ | **Konfigurowanie metod** – klucz FIDO2, karty TOTP, Temporary Access Pass i pozorne MFA |
+| 📊 | **Raport MFA dzierżawy** – stan MFA i ostatnie logowanie wszystkich użytkowników jako sygnalizacja świetlna, z wyszukiwaniem, filtrami i kolorowym eksportem do Excela |
 | 🆘 | **Konto awaryjne** – tworzenie dostępu awaryjnego (break-glass) z kluczem FIDO2 i nieznanym hasłem |
 | 🌐 | **Wielojęzyczność** – angielski (domyślnie), niemiecki, hiszpański, francuski, włoski, portugalski, niderlandzki i polski |
 
@@ -150,6 +152,29 @@ Jeśli rejestracja FIDO2 nie powiedzie się lub zostanie anulowana, konto pozost
 
 ---
 
+## Raport MFA dzierżawy
+
+Kliknij **"Raport MFA …"** w lewym górnym rogu, aby za jednym razem sprawdzić stan MFA **wszystkich użytkowników dzierżawy** (lub członków grupy, w tym grup zagnieżdżonych).
+
+![Raport stanu MFA dzierżawy](images/en/tenant-report.png)
+
+1. Wybierz zakres: **"Wszyscy użytkownicy"** lub **"Członkowie grupy (w tym grupy zagnieżdżone)"** (wyszukaj grupę po początku nazwy lub po identyfikatorze obiektu). Domyślnie uwzględniane są tylko włączone konta, bez kont gości.
+2. Kliknij **"Utwórz raport"**. Lista wypełnia się w trakcie odczytu metod (20 użytkowników na jedno żądanie Graph). **"Anuluj"** zatrzymuje po bieżącym bloku.
+3. Kafelki pokazują liczbę dla każdego koloru sygnalizacji – **kliknięcie kafelka filtruje** listę. Dodatkowo można **wyszukiwać** (nazwa, UPN, e-mail, role, metody, ocena, dział) i pokazać **"Tylko administratorzy"**.
+   Kolumny **"Ostatnie logowanie"** i **"Dni od"** pokazują, czy konto jest faktycznie używane. Konta bez logowania od ponad 90 dni lub takie, które nigdy się nie logowały, są wyróżnione na czerwono, liczone na osobnym kafelku i można je pokazać za pomocą **"Tylko nieaktywne (> 90 dni lub nigdy)"**.
+4. **"Eksport do Excela …"** zapisuje aktualnie wyświetlane wpisy jako plik `.xlsx` w kolorach sygnalizacji, wraz z arkuszem podsumowania. Nie jest potrzebny ani Excel, ani dodatkowy moduł.
+5. **Dwukrotne kliknięcie** użytkownika zamyka raport i otwiera użytkownika w oknie głównym do edycji. Raport jest zachowywany do wylogowania.
+
+| Sygnalizacja | Znaczenie |
+|---|---|
+| 🔴 **Czerwony** | Brak MFA (tylko hasło) **lub** rola administracyjna tylko z niebezpiecznym MFA (SMS/połączenie, TAP lub fałszywe MFA) |
+| 🟡 **Żółty** | Tylko niebezpieczne MFA (SMS/połączenie, TAP lub fałszywe MFA) **lub** administrator bez MFA odpornego na phishing (FIDO2, passkey, Windows Hello) |
+| 🟢 **Zielony** | Silne MFA – dla administratorów odporne na phishing |
+
+Za role administracyjne uznawane są role aktywne i kwalifikujące się przez PIM (oznaczone „(PIM)”), a także role przypisane przez grupy.
+
+---
+
 ## Często zadawane pytania i rozwiązywanie problemów
 
 **Dwukrotne kliknięcie `Start.cmd` nic nie robi lub wyświetla błąd.**
@@ -174,6 +199,9 @@ Karta należy już do innego użytkownika. Najpierw usuń ją u niego.
 Twojemu kontu brakuje roli administratora (zob. [role](#wymagania-i-uprawnienia-dla-administratorów)).
 
 Każda czynność jest zapisywana z godziną w **dzienniku** w prawym dolnym rogu. Dodatkowo jest od razu zapisywana w dziennym pliku dziennika w folderze narzędzia, np. `Logs\2026-10-12.log` (jeśli folder nie jest zapisywalny: `%LOCALAPPDATA%\M365MfaTool\Logs`) – przydatne przy zgłoszeniach.
+
+**Raport MFA: kolumny ostatniego logowania są puste.**
+Wymagane są licencja **Entra ID P1/P2**, uprawnienie `AuditLog.Read.All` oraz rola, która może odczytywać dane logowania (np. **Czytelnik raportów**). Bez nich raport i tak zostanie utworzony, ale bez tych informacji; przyczyna jest podana w dzienniku.
 
 ---
 
@@ -222,6 +250,15 @@ Dodatkowo przy pierwszym koncie awaryjnym:
 | `Domain.Read.All` | Wyświetlanie domen do wyboru |
 | `RoleManagement.ReadWrite.Directory` | Przypisywanie roli Global Administrator |
 
+Dodatkowo dla raportu MFA:
+
+| Uprawnienie | Do czego |
+|---|---|
+| `GroupMember.Read.All` | Wybór grupy jako zakresu, ustalanie ról administracyjnych przypisanych przez grupy |
+| `AuditLog.Read.All` | Ostatnie logowanie (opcjonalne – bez niego raport jest tworzony bez tej kolumny) |
+
+Ostatnie logowanie wymaga ponadto licencji **Entra ID P1/P2** oraz roli, która może odczytywać dane logowania, np. **Czytelnik raportów**, **Czytelnik zabezpieczeń** lub **Czytelnik globalny**. Pokazywane jest ostatnie udane logowanie (interakcyjne lub nieinterakcyjne); Microsoft rejestruje je od grudnia 2023 r., starsze wartości to ostatnia próba logowania.
+
 ### Wymagane role Entra dla własnego konta
 
 | Zadanie | Rola |
@@ -255,8 +292,11 @@ W **zasadach metod uwierzytelniania** (Centrum administracyjne Entra → Ochrona
 | `Start-M365MfaTool.ps1` | Interfejs, zarządzanie stanem i zdarzenia |
 | `UI/MainWindow.xaml` | Układ okna głównego |
 | `UI/BreakGlassDialog.xaml` | Okno dla nowych kont awaryjnych |
+| `UI/TenantReportWindow.xaml` | Okno raportu MFA |
 | `Modules/Graph.psm1` | Logowanie, żądania Graph, użytkownicy, domeny, role, sygnalizator MFA, odczyt/usuwanie metod |
 | `Modules/Provisioning.psm1` | Konfiguracja FIDO2, kart TOTP, pozornego MFA, TAP i kont awaryjnych |
+| `Modules/TenantReport.psm1` | Raport MFA: użytkownicy, role, zbiorcze zapytania o metody, ocena w formie sygnalizacji, eksport do Excela |
+| `Modules/Xlsx.psm1` | Lekki generator plików Excel (.xlsx bez Excela i dodatkowych modułów) |
 | `Modules/Localization.psm1` | Wielojęzyczność: wczytuje pliki językowe i dostarcza teksty |
 | `Languages/*.json` | Teksty dla każdego języka (`en.json` jest wzorcem) |
 | `Install-Prerequisites.ps1` | Opcjonalna wcześniejsza instalacja wszystkich modułów |
