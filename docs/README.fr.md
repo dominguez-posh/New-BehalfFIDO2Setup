@@ -16,6 +16,7 @@ Avec cet outil, les administrateurs et le support informatique configurent **l'a
 - [Guide pas à pas](#guide-pas-à-pas)
 - [Choisir la bonne méthode](#choisir-la-bonne-méthode)
 - [Créer un compte d'urgence](#créer-un-compte-durgence)
+- [Guide MFA par e-mail](#guide-mfa-par-e-mail)
 - [Rapport MFA du locataire](#rapport-mfa-du-locataire)
 - [Questions fréquentes et dépannage](#questions-fréquentes-et-dépannage)
 - [Sécurité](#sécurité)
@@ -34,6 +35,7 @@ Avec cet outil, les administrateurs et le support informatique configurent **l'a
 | 👑 | **Rôles d'administration** – indique si l'utilisateur dispose de droits administratifs |
 | 📋 | **Afficher et supprimer les méthodes MFA** – toutes les méthodes enregistrées avec date et détails |
 | ➕ | **Configurer des méthodes** – clé FIDO2, cartes TOTP, Temporary Access Pass et MFA fictive |
+| ✉️ | **Guide MFA par e-mail** – envoie aux utilisateurs sans MFA ou avec une MFA faible un guide pas à pas pour l'application Microsoft Authenticator, dans leur langue et avec aperçu |
 | 📊 | **Rapport MFA du locataire** – statut MFA et dernière connexion de tous les utilisateurs en feu tricolore, avec recherche, filtres et export Excel en couleur |
 | 🆘 | **Compte d'urgence** – créer un accès d'urgence (break-glass) avec clé FIDO2 et mot de passe inconnu |
 | 🌐 | **Multilingue** – anglais (par défaut), allemand, espagnol, français, italien, portugais, néerlandais et polonais |
@@ -152,6 +154,22 @@ Si l'enregistrement FIDO2 échoue ou est annulé, le compte reste protégé par 
 
 ---
 
+## Guide MFA par e-mail
+
+Si un utilisateur **n'a pas de MFA ou seulement une MFA faible** (feu rouge ou jaune), le bouton **"Envoyer le guide …"** apparaît à côté du statut MFA. Il envoie à l'utilisateur un e-mail avec un guide pas à pas simple : ouvrir aka.ms/mfasetup, ajouter l'application Microsoft Authenticator, scanner le code QR. Si l'utilisateur ne peut pas ou ne souhaite pas utiliser l'application, l'e-mail l'invite à contacter le service informatique – simplement en répondant à l'e-mail.
+
+![Aperçu du guide MFA](images/en/mfa-guide-dialog.png)
+
+- **D'abord l'aperçu :** l'e-mail est affiché exactement tel qu'il sera envoyé. Il n'est envoyé qu'après **"Envoyer l'e-mail"** et une confirmation.
+- **Langue de l'utilisateur :** l'e-mail est rédigé dans la langue préférée de l'utilisateur dans Entra ID (sinon dans celle du locataire, sinon en anglais) et peut être changé dans l'aperçu.
+- **Expéditeur :** par défaut votre propre boîte aux lettres. Vous pouvez indiquer une boîte partagée (p. ex. celle du service informatique) pour laquelle vous avez l'autorisation *Envoyer en tant que* – les réponses y arrivent alors. Le dernier expéditeur est mémorisé.
+- **Images :** les captures sont intégrées à l'e-mail en pièces jointes incorporées (Base64) – rien n'est chargé depuis Internet, et elles s'affichent aussi dans Outlook.
+- **Date d'envoi dans l'objet utilisateur :** après l'envoi, la date, l'expéditeur et la langue sont enregistrés dans une open extension de l'utilisateur (`com.m365mfatool.mfaGuide`). Les open extensions n'existent que dans Entra ID : elles sont modifiables même pour les utilisateurs synchronisés (hybrides) et ne sont jamais écrasées par Entra Connect / Cloud Sync – contrairement à `extensionAttribute1–15`. La date est affichée sous le feu tricolore et dans le rapport MFA (colonne **"Guide envoyé"**).
+
+Les captures du smartphone dans l'e-mail proviennent de la documentation Microsoft (MicrosoftDocs/entra-docs, licence MIT) ; toutes les captures sont anonymisées.
+
+---
+
 ## Rapport MFA du locataire
 
 Cliquez sur **"Rapport MFA …"** en haut à gauche pour vérifier en une fois le statut MFA de **tous les utilisateurs du locataire** (ou des membres d'un groupe, y compris les groupes imbriqués).
@@ -259,6 +277,16 @@ En plus, pour le rapport MFA :
 
 La dernière connexion nécessite en outre une licence **Entra ID P1/P2** et un rôle autorisé à lire les données de connexion, p. ex. **Lecteur de rapports**, **Lecteur de sécurité** ou **Lecteur général**. C'est la dernière connexion réussie (interactive ou non interactive) qui est affichée ; Microsoft l'enregistre depuis décembre 2023, les valeurs plus anciennes correspondent à la dernière tentative de connexion.
 
+En plus, pour le guide MFA :
+
+| Autorisation | Utilisation |
+|---|---|
+| `Mail.Send` | Envoyer l'e-mail depuis votre propre boîte aux lettres |
+| `Mail.Send.Shared` | Envoyer l'e-mail depuis une boîte partagée (uniquement si une est indiquée) |
+| `User.ReadWrite.All` | Enregistrer la date d'envoi dans l'objet utilisateur |
+
+L'enregistrement de la date d'envoi nécessite un rôle autorisé à modifier les utilisateurs, p. ex. **Administrateur d'utilisateurs**.
+
 ### Rôles Entra nécessaires pour votre propre compte
 
 | Tâche | Rôle |
@@ -293,12 +321,15 @@ Dans la **stratégie des méthodes d'authentification** (Centre d'administration
 | `UI/MainWindow.xaml` | Disposition de la fenêtre principale |
 | `UI/BreakGlassDialog.xaml` | Boîte de dialogue pour les nouveaux comptes d'urgence |
 | `UI/TenantReportWindow.xaml` | Fenêtre du rapport MFA |
+| `UI/MfaGuideDialog.xaml` | Boîte de dialogue d'aperçu du guide MFA |
 | `Modules/Graph.psm1` | Connexion, requêtes Graph, utilisateurs, domaines, rôles, feu tricolore MFA, lecture/suppression des méthodes |
 | `Modules/Provisioning.psm1` | Configuration de FIDO2, cartes TOTP, MFA fictive, TAP et comptes d'urgence |
 | `Modules/TenantReport.psm1` | Rapport MFA : utilisateurs, rôles, requêtes de méthodes groupées, évaluation en feu tricolore, export Excel |
 | `Modules/Xlsx.psm1` | Générateur Excel léger (.xlsx sans Excel ni module supplémentaire) |
+| `Modules/MfaGuideMail.psm1` | Guide MFA : e-mail dans la langue de l'utilisateur, envoi via Graph, date d'envoi dans l'objet utilisateur |
 | `Modules/Localization.psm1` | Multilinguisme : charge les fichiers de langue et fournit les textes |
 | `Languages/*.json` | Textes par langue (`en.json` est la référence) |
+| `Mail/Images/` | Captures anonymisées pour l'e-mail |
 | `Install-Prerequisites.ps1` | Installation préalable facultative de tous les modules |
 | `docs/` | Documentation traduite et captures d'écran |
 | `Logs/` | Fichiers journaux quotidiens (créés automatiquement, non stockés dans Git) |

@@ -16,6 +16,7 @@ Com esta ferramenta, administradores e equipas de suporte configuram a **autenti
 - [Guia passo a passo](#guia-passo-a-passo)
 - [Que método escolher](#que-método-escolher)
 - [Criar uma conta de emergência](#criar-uma-conta-de-emergência)
+- [Guia de MFA por e-mail](#guia-de-mfa-por-e-mail)
 - [Relatório MFA do locatário](#relatório-mfa-do-locatário)
 - [Perguntas frequentes e resolução de problemas](#perguntas-frequentes-e-resolução-de-problemas)
 - [Segurança](#segurança)
@@ -34,6 +35,7 @@ Com esta ferramenta, administradores e equipas de suporte configuram a **autenti
 | 👑 | **Funções de administrador** – mostra se o utilizador tem direitos administrativos |
 | 📋 | **Ver e eliminar métodos MFA** – todos os métodos registados com data e detalhes |
 | ➕ | **Configurar métodos** – chave FIDO2, cartões TOTP, Temporary Access Pass e MFA fictícia |
+| ✉️ | **Guia de MFA por e-mail** – envia aos utilizadores sem MFA ou com MFA fraca um guia passo a passo para a aplicação Microsoft Authenticator, no seu idioma e com pré-visualização |
 | 📊 | **Relatório MFA do locatário** – estado MFA e último início de sessão de todos os utilizadores como semáforo, com pesquisa, filtros e exportação para Excel a cores |
 | 🆘 | **Conta de emergência** – criar um acesso de emergência (break-glass) com chave FIDO2 e palavra-passe desconhecida |
 | 🌐 | **Multilingue** – inglês (predefinido), alemão, espanhol, francês, italiano, português, neerlandês e polaco |
@@ -152,6 +154,22 @@ Se o registo FIDO2 falhar ou for cancelado, a conta continua protegida pela MFA 
 
 ---
 
+## Guia de MFA por e-mail
+
+Se um utilizador **não tiver MFA ou tiver apenas MFA fraca** (semáforo vermelho ou amarelo), aparece junto ao estado da MFA o botão **"Enviar guia …"**. Envia ao utilizador um e-mail com um guia passo a passo simples: abrir aka.ms/mfasetup, adicionar a aplicação Microsoft Authenticator, ler o código QR. Se o utilizador não puder ou não quiser usar a aplicação, o e-mail pede-lhe que contacte o departamento de TI – basta responder ao e-mail.
+
+![Pré-visualização do guia de MFA](images/en/mfa-guide-dialog.png)
+
+- **Primeiro a pré-visualização:** o e-mail é mostrado exatamente como será enviado. Só é enviado depois de **"Enviar e-mail"** e de uma confirmação.
+- **Idioma do utilizador:** o e-mail é escrito no idioma preferido do utilizador no Entra ID (caso contrário no do locatário, caso contrário em inglês) e pode ser alterado na pré-visualização.
+- **Remetente:** por predefinição a sua própria caixa de correio. Pode indicar uma caixa partilhada (p. ex. a de TI) para a qual tenha a permissão *Enviar como* – as respostas chegam então aí. O último remetente é memorizado.
+- **Imagens:** as capturas estão incorporadas no e-mail como anexos inline (Base64) – nada é carregado da Internet e também são apresentadas no Outlook.
+- **Data de envio no objeto do utilizador:** após o envio, a data, o remetente e o idioma são guardados numa open extension do utilizador (`com.m365mfatool.mfaGuide`). As open extensions só existem no Entra ID: podem ser escritas também em utilizadores sincronizados (híbridos) e nunca são substituídas pelo Entra Connect / Cloud Sync – ao contrário de `extensionAttribute1–15`. A data é mostrada por baixo do semáforo e no relatório MFA (coluna **"Guia enviado"**).
+
+As capturas do smartphone no e-mail provêm da documentação da Microsoft (MicrosoftDocs/entra-docs, licença MIT); todas as capturas estão anonimizadas.
+
+---
+
 ## Relatório MFA do locatário
 
 Clique em **"Relatório MFA …"** no canto superior esquerdo para verificar de uma só vez o estado MFA de **todos os utilizadores do locatário** (ou dos membros de um grupo, incl. grupos aninhados).
@@ -259,6 +277,16 @@ Adicionalmente, para o relatório MFA:
 
 O último início de sessão requer ainda uma licença **Entra ID P1/P2** e uma função que possa ler os dados de início de sessão, p. ex. **Leitor de relatórios**, **Leitor de segurança** ou **Leitor global**. É mostrado o último início de sessão bem-sucedido (interativo ou não interativo); a Microsoft regista-o desde dezembro de 2023, os valores mais antigos correspondem à última tentativa de início de sessão.
 
+Adicionalmente, para o guia de MFA:
+
+| Permissão | Para quê |
+|---|---|
+| `Mail.Send` | Enviar o e-mail a partir da sua própria caixa de correio |
+| `Mail.Send.Shared` | Enviar o e-mail a partir de uma caixa partilhada (só se for indicada) |
+| `User.ReadWrite.All` | Guardar a data de envio no objeto do utilizador |
+
+Para guardar a data de envio é necessária uma função que possa alterar utilizadores, p. ex. **Administrador de utilizadores**.
+
 ### Funções do Entra necessárias para a sua própria conta
 
 | Tarefa | Função |
@@ -293,12 +321,15 @@ Na **política de métodos de autenticação** (Centro de administração do Ent
 | `UI/MainWindow.xaml` | Esquema da janela principal |
 | `UI/BreakGlassDialog.xaml` | Caixa de diálogo para novas contas de emergência |
 | `UI/TenantReportWindow.xaml` | Janela do relatório MFA |
+| `UI/MfaGuideDialog.xaml` | Caixa de diálogo de pré-visualização do guia de MFA |
 | `Modules/Graph.psm1` | Início de sessão, pedidos ao Graph, utilizadores, domínios, funções, semáforo de MFA, leitura/eliminação de métodos |
 | `Modules/Provisioning.psm1` | Configuração de FIDO2, cartões TOTP, MFA fictícia, TAP e contas de emergência |
 | `Modules/TenantReport.psm1` | Relatório MFA: utilizadores, funções, pedidos de métodos agrupados, avaliação em semáforo, exportação para Excel |
 | `Modules/Xlsx.psm1` | Gerador de Excel simples (.xlsx sem Excel nem módulos adicionais) |
+| `Modules/MfaGuideMail.psm1` | Guia de MFA: e-mail no idioma do utilizador, envio através do Graph, data de envio no objeto do utilizador |
 | `Modules/Localization.psm1` | Multilingue: carrega os ficheiros de idioma e fornece os textos |
 | `Languages/*.json` | Textos por idioma (`en.json` é a referência) |
+| `Mail/Images/` | Capturas anonimizadas para o e-mail |
 | `Install-Prerequisites.ps1` | Instalação prévia opcional de todos os módulos |
 | `docs/` | Documentação traduzida e capturas de ecrã |
 | `Logs/` | Ficheiros de registo diários (criados automaticamente, não guardados no Git) |

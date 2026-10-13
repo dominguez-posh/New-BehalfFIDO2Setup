@@ -16,6 +16,7 @@ Met deze tool richten beheerders en helpdeskmedewerkers **meervoudige verificati
 - [Stap voor stap](#stap-voor-stap)
 - [Welke methode kiezen](#welke-methode-kiezen)
 - [Een noodaccount aanmaken](#een-noodaccount-aanmaken)
+- [MFA-handleiding per e-mail](#mfa-handleiding-per-e-mail)
 - [MFA-rapport voor de tenant](#mfa-rapport-voor-de-tenant)
 - [Veelgestelde vragen en probleemoplossing](#veelgestelde-vragen-en-probleemoplossing)
 - [Beveiliging](#beveiliging)
@@ -34,6 +35,7 @@ Met deze tool richten beheerders en helpdeskmedewerkers **meervoudige verificati
 | 👑 | **Beheerdersrollen** – toont of de gebruiker beheerdersrechten heeft |
 | 📋 | **MFA-methoden bekijken en verwijderen** – alle geregistreerde methoden met datum en details |
 | ➕ | **Methoden inrichten** – FIDO2-sleutel, TOTP-kaarten, Temporary Access Pass en nep-MFA |
+| ✉️ | **MFA-handleiding per e-mail** – stuurt gebruikers zonder of met zwakke MFA een stapsgewijze handleiding voor de Microsoft Authenticator-app, in hun taal en met voorbeeld |
 | 📊 | **MFA-rapport voor de tenant** – MFA-status en laatste aanmelding van alle gebruikers als stoplicht, met zoeken, filters en Excel-export in kleur |
 | 🆘 | **Noodaccount** – een noodtoegang (break-glass) met FIDO2-sleutel en onbekend wachtwoord aanmaken |
 | 🌐 | **Meertalig** – Engels (standaard), Duits, Spaans, Frans, Italiaans, Portugees, Nederlands en Pools |
@@ -152,6 +154,22 @@ Als de FIDO2-registratie mislukt of wordt geannuleerd, blijft het account beveil
 
 ---
 
+## MFA-handleiding per e-mail
+
+Heeft een gebruiker **geen of alleen zwakke MFA** (stoplicht rood of geel), dan verschijnt naast de MFA-status de knop **"Handleiding sturen …"**. Deze stuurt de gebruiker een e-mail met een eenvoudige stapsgewijze handleiding: aka.ms/mfasetup openen, de Microsoft Authenticator-app toevoegen, de QR-code scannen. Kan of wil de gebruiker de app niet gebruiken, dan vraagt de e-mail om contact op te nemen met de IT-afdeling – gewoon door de e-mail te beantwoorden.
+
+![Voorbeeld van de MFA-handleiding](images/en/mfa-guide-dialog.png)
+
+- **Eerst het voorbeeld:** de e-mail wordt precies zo getoond als hij wordt verzonden. Hij wordt pas verzonden na **"E-mail verzenden"** en een bevestiging.
+- **Taal van de gebruiker:** de e-mail wordt geschreven in de voorkeurstaal van de gebruiker in Entra ID (anders in die van de tenant, anders in het Engels) en kan in het voorbeeld worden gewijzigd.
+- **Afzender:** standaard uw eigen postvak. U kunt ook een gedeeld postvak opgeven (bijv. het IT-postvak) waarvoor u de machtiging *Verzenden als* hebt – antwoorden komen dan daar terecht. De laatste afzender wordt onthouden.
+- **Afbeeldingen:** de schermafbeeldingen zijn als inline bijlagen (Base64) in de e-mail opgenomen – er wordt niets van internet geladen, en ze worden ook in Outlook getoond.
+- **Verzenddatum in het gebruikersobject:** na het verzenden worden datum, afzender en taal opgeslagen in een open extension van de gebruiker (`com.m365mfatool.mfaGuide`). Open extensions bestaan alleen in Entra ID: ze zijn ook bij gesynchroniseerde (hybride) gebruikers schrijfbaar en worden nooit door Entra Connect / Cloud Sync overschreven – anders dan `extensionAttribute1–15`. De datum wordt onder het stoplicht en in het MFA-rapport getoond (kolom **"Handleiding verzonden"**).
+
+De smartphone-schermafbeeldingen in de e-mail komen uit de Microsoft-documentatie (MicrosoftDocs/entra-docs, MIT-licentie); alle schermafbeeldingen zijn geanonimiseerd.
+
+---
+
 ## MFA-rapport voor de tenant
 
 Klik linksboven op **"MFA-rapport …"** om in één keer de MFA-status van **alle gebruikers van de tenant** (of van de leden van een groep, incl. geneste groepen) te controleren.
@@ -259,6 +277,16 @@ Daarnaast voor het MFA-rapport:
 
 Voor de laatste aanmelding zijn daarnaast een **Entra ID P1/P2**-licentie en een rol nodig die aanmeldgegevens mag lezen, bijv. **Rapportlezer**, **Beveiligingslezer** of **Globale lezer**. Getoond wordt de laatste geslaagde aanmelding (interactief of niet-interactief); Microsoft registreert deze sinds december 2023, oudere waarden zijn de laatste aanmeldpoging.
 
+Daarnaast voor de MFA-handleiding:
+
+| Machtiging | Waarvoor |
+|---|---|
+| `Mail.Send` | E-mail verzenden vanuit uw eigen postvak |
+| `Mail.Send.Shared` | E-mail verzenden vanuit een gedeeld postvak (alleen als er een is opgegeven) |
+| `User.ReadWrite.All` | Verzenddatum in het gebruikersobject opslaan |
+
+Voor het opslaan van de verzenddatum is een rol nodig die gebruikers mag wijzigen, bijv. **Gebruikersbeheerder**.
+
 ### Benodigde Entra-rollen voor uw eigen account
 
 | Taak | Rol |
@@ -293,12 +321,15 @@ In het **beleid voor verificatiemethoden** (Entra-beheercentrum → Beveiliging 
 | `UI/MainWindow.xaml` | Indeling van het hoofdvenster |
 | `UI/BreakGlassDialog.xaml` | Dialoogvenster voor nieuwe noodaccounts |
 | `UI/TenantReportWindow.xaml` | Venster van het MFA-rapport |
+| `UI/MfaGuideDialog.xaml` | Voorbeeldvenster van de MFA-handleiding |
 | `Modules/Graph.psm1` | Aanmelden, Graph-aanvragen, gebruikers, domeinen, rollen, MFA-stoplicht, methoden lezen/verwijderen |
 | `Modules/Provisioning.psm1` | Inrichten van FIDO2, TOTP-kaarten, nep-MFA, TAP en noodaccounts |
 | `Modules/TenantReport.psm1` | MFA-rapport: gebruikers, rollen, gebundelde methode-aanvragen, stoplichtbeoordeling, Excel-export |
 | `Modules/Xlsx.psm1` | Eenvoudige Excel-writer (.xlsx zonder Excel of extra modules) |
+| `Modules/MfaGuideMail.psm1` | MFA-handleiding: e-mail in de taal van de gebruiker, verzending via Graph, verzenddatum in het gebruikersobject |
 | `Modules/Localization.psm1` | Meertaligheid: laadt de taalbestanden en levert de teksten |
 | `Languages/*.json` | Teksten per taal (`en.json` is de referentie) |
+| `Mail/Images/` | Geanonimiseerde schermafbeeldingen voor de e-mail |
 | `Install-Prerequisites.ps1` | Optionele voorafgaande installatie van alle modules |
 | `docs/` | Vertaalde documentatie en schermafbeeldingen |
 | `Logs/` | Dagelijkse logbestanden (worden automatisch aangemaakt, niet in Git) |

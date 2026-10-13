@@ -2,6 +2,8 @@
 *.png
 # Exception: screenshots for the documentation
 !docs/**/*.png
+# Exception: anonymized screenshots of the MFA setup guide email
+!Mail/Images/*.png
 
 # Editor / operating system
 .vscode/

@@ -16,6 +16,7 @@ To narzędzie pozwala administratorom i pracownikom helpdesku konfigurować **uw
 - [Instrukcja krok po kroku](#instrukcja-krok-po-kroku)
 - [Którą metodę wybrać](#którą-metodę-wybrać)
 - [Tworzenie konta awaryjnego](#tworzenie-konta-awaryjnego)
+- [Instrukcja MFA e-mailem](#instrukcja-mfa-e-mailem)
 - [Raport MFA dzierżawy](#raport-mfa-dzierżawy)
 - [Często zadawane pytania i rozwiązywanie problemów](#często-zadawane-pytania-i-rozwiązywanie-problemów)
 - [Bezpieczeństwo](#bezpieczeństwo)
@@ -34,6 +35,7 @@ To narzędzie pozwala administratorom i pracownikom helpdesku konfigurować **uw
 | 👑 | **Role administratora** – pokazuje, czy użytkownik ma uprawnienia administracyjne |
 | 📋 | **Przeglądanie i usuwanie metod MFA** – wszystkie zarejestrowane metody z datą i szczegółami |
 | ➕ | **Konfigurowanie metod** – klucz FIDO2, karty TOTP, Temporary Access Pass i pozorne MFA |
+| ✉️ | **Instrukcja MFA e-mailem** – wysyła użytkownikom bez MFA lub ze słabym MFA instrukcję krok po kroku dla aplikacji Microsoft Authenticator, w ich języku i z podglądem |
 | 📊 | **Raport MFA dzierżawy** – stan MFA i ostatnie logowanie wszystkich użytkowników jako sygnalizacja świetlna, z wyszukiwaniem, filtrami i kolorowym eksportem do Excela |
 | 🆘 | **Konto awaryjne** – tworzenie dostępu awaryjnego (break-glass) z kluczem FIDO2 i nieznanym hasłem |
 | 🌐 | **Wielojęzyczność** – angielski (domyślnie), niemiecki, hiszpański, francuski, włoski, portugalski, niderlandzki i polski |
@@ -152,6 +154,22 @@ Jeśli rejestracja FIDO2 nie powiedzie się lub zostanie anulowana, konto pozost
 
 ---
 
+## Instrukcja MFA e-mailem
+
+Jeśli użytkownik **nie ma MFA lub ma tylko słabe MFA** (sygnalizacja czerwona lub żółta), obok stanu MFA pojawia się przycisk **"Wyślij instrukcję …"**. Wysyła on użytkownikowi e-mail z prostą instrukcją krok po kroku: otworzyć aka.ms/mfasetup, dodać aplikację Microsoft Authenticator, zeskanować kod QR. Jeśli użytkownik nie może lub nie chce używać aplikacji, wiadomość prosi o kontakt z działem IT – wystarczy na nią odpowiedzieć.
+
+![Podgląd instrukcji MFA](images/en/mfa-guide-dialog.png)
+
+- **Najpierw podgląd:** wiadomość jest wyświetlana dokładnie tak, jak zostanie wysłana. Jest wysyłana dopiero po kliknięciu **"Wyślij e-mail"** i potwierdzeniu.
+- **Język użytkownika:** wiadomość jest pisana w preferowanym języku użytkownika z Entra ID (w przeciwnym razie w języku dzierżawy, a w ostateczności po angielsku) i można go zmienić w podglądzie.
+- **Nadawca:** domyślnie własna skrzynka pocztowa. Można też podać skrzynkę udostępnioną (np. działu IT), do której masz uprawnienie *Wyślij jako* – odpowiedzi trafią wtedy tam. Ostatni nadawca jest zapamiętywany.
+- **Obrazy:** zrzuty ekranu są osadzone w wiadomości jako załączniki wbudowane (Base64) – nic nie jest pobierane z internetu, a obrazy wyświetlają się także w Outlooku.
+- **Data wysłania w obiekcie użytkownika:** po wysłaniu data, nadawca i język są zapisywane w open extension użytkownika (`com.m365mfatool.mfaGuide`). Open extensions istnieją tylko w Entra ID: można je zapisywać także dla użytkowników synchronizowanych (hybrydowych) i nigdy nie są nadpisywane przez Entra Connect / Cloud Sync – w przeciwieństwie do `extensionAttribute1–15`. Data jest pokazywana pod sygnalizacją i w raporcie MFA (kolumna **"Instrukcja wysłana"**).
+
+Zrzuty ekranu smartfona w wiadomości pochodzą z dokumentacji Microsoft (MicrosoftDocs/entra-docs, licencja MIT); wszystkie zrzuty ekranu są zanonimizowane.
+
+---
+
 ## Raport MFA dzierżawy
 
 Kliknij **"Raport MFA …"** w lewym górnym rogu, aby za jednym razem sprawdzić stan MFA **wszystkich użytkowników dzierżawy** (lub członków grupy, w tym grup zagnieżdżonych).
@@ -259,6 +277,16 @@ Dodatkowo dla raportu MFA:
 
 Ostatnie logowanie wymaga ponadto licencji **Entra ID P1/P2** oraz roli, która może odczytywać dane logowania, np. **Czytelnik raportów**, **Czytelnik zabezpieczeń** lub **Czytelnik globalny**. Pokazywane jest ostatnie udane logowanie (interakcyjne lub nieinterakcyjne); Microsoft rejestruje je od grudnia 2023 r., starsze wartości to ostatnia próba logowania.
 
+Dodatkowo dla instrukcji MFA:
+
+| Uprawnienie | Do czego |
+|---|---|
+| `Mail.Send` | Wysyłanie wiadomości z własnej skrzynki |
+| `Mail.Send.Shared` | Wysyłanie wiadomości ze skrzynki udostępnionej (tylko jeśli została podana) |
+| `User.ReadWrite.All` | Zapis daty wysłania w obiekcie użytkownika |
+
+Zapis daty wysłania wymaga roli, która może modyfikować użytkowników, np. **Administrator użytkowników**.
+
 ### Wymagane role Entra dla własnego konta
 
 | Zadanie | Rola |
@@ -293,12 +321,15 @@ W **zasadach metod uwierzytelniania** (Centrum administracyjne Entra → Ochrona
 | `UI/MainWindow.xaml` | Układ okna głównego |
 | `UI/BreakGlassDialog.xaml` | Okno dla nowych kont awaryjnych |
 | `UI/TenantReportWindow.xaml` | Okno raportu MFA |
+| `UI/MfaGuideDialog.xaml` | Okno podglądu instrukcji MFA |
 | `Modules/Graph.psm1` | Logowanie, żądania Graph, użytkownicy, domeny, role, sygnalizator MFA, odczyt/usuwanie metod |
 | `Modules/Provisioning.psm1` | Konfiguracja FIDO2, kart TOTP, pozornego MFA, TAP i kont awaryjnych |
 | `Modules/TenantReport.psm1` | Raport MFA: użytkownicy, role, zbiorcze zapytania o metody, ocena w formie sygnalizacji, eksport do Excela |
 | `Modules/Xlsx.psm1` | Lekki generator plików Excel (.xlsx bez Excela i dodatkowych modułów) |
+| `Modules/MfaGuideMail.psm1` | Instrukcja MFA: wiadomość w języku użytkownika, wysyłka przez Graph, data wysłania w obiekcie użytkownika |
 | `Modules/Localization.psm1` | Wielojęzyczność: wczytuje pliki językowe i dostarcza teksty |
 | `Languages/*.json` | Teksty dla każdego języka (`en.json` jest wzorcem) |
+| `Mail/Images/` | Zanonimizowane zrzuty ekranu do wiadomości |
 | `Install-Prerequisites.ps1` | Opcjonalna wcześniejsza instalacja wszystkich modułów |
 | `docs/` | Przetłumaczona dokumentacja i zrzuty ekranu |
 | `Logs/` | Dzienne pliki dziennika (tworzone automatycznie, nie są przechowywane w Git) |

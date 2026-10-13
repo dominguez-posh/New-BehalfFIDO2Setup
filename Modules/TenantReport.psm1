@@ -233,7 +233,7 @@ function Invoke-M365UserBatch {
     .PARAMETER Path
         Request path with {0} as placeholder for the user ID, e.g. '/users/{0}/authentication/methods'.
     .OUTPUTS
-        Hashtable user ID -> @{ Body = response body; Error = message or $null }
+        Hashtable user ID -> @{ Body = response body; Status = HTTP status; Error = message or $null }
     #>
     param(
         [Parameter(Mandatory)][string[]]$UserIds,
@@ -270,16 +270,16 @@ function Invoke-M365UserBatch {
                 if ($body -is [System.Collections.IDictionary] -and $body['error'] -is [System.Collections.IDictionary]) {
                     $message = '{0}: {1}' -f $body['error']['code'], $body['error']['message']
                 }
-                $result[$userId] = @{ Body = $null; Error = $message }
+                $result[$userId] = @{ Body = $null; Status = $status; Error = $message }
                 continue
             }
-            $result[$userId] = @{ Body = $body; Error = $null }
+            $result[$userId] = @{ Body = $body; Status = $status; Error = $null }
         }
 
         $pending = @($retry)
         if ($pending.Count) { & $Wait ($retryAfter * 1000) }
     }
-    foreach ($userId in $pending) { $result[$userId] = @{ Body = $null; Error = T 'Report.Throttled' } }
+    foreach ($userId in $pending) { $result[$userId] = @{ Body = $null; Status = 429; Error = T 'Report.Throttled' } }
     $result
 }
 
@@ -330,6 +330,27 @@ function Get-M365SignInBatch {
     $result
 }
 
+function Get-M365MfaGuideBatch {
+    <#
+    .SYNOPSIS
+        Reads when the MFA guide was last sent to up to 20 users (open extension, see MfaGuideMail.psm1).
+    .OUTPUTS
+        Hashtable user ID -> object with SentAt etc., or $null if never sent or not readable.
+    #>
+    param(
+        [Parameter(Mandatory)][string[]]$UserIds,
+        [scriptblock]$Wait = { param($Milliseconds) Start-Sleep -Milliseconds $Milliseconds }
+    )
+
+    $result = @{}
+    $responses = Invoke-M365UserBatch -UserIds $UserIds -Path ('/users/{0}/extensions/' + (Get-M365MfaGuideExtensionName)) -Wait $Wait
+    foreach ($userId in $responses.Keys) {
+        # 404 = never sent; other errors are ignored (the column stays empty)
+        $result[$userId] = if ($responses[$userId].Error) { $null } else { ConvertTo-M365MfaGuideInfo $responses[$userId].Body }
+    }
+    $result
+}
+
 #endregion
 
 #region Rating
@@ -375,7 +396,8 @@ function New-M365ReportRow {
     param(
         [Parameter(Mandatory)]$User,
         [string[]]$Roles = @(),
-        [System.Collections.IDictionary]$MethodResult
+        [System.Collections.IDictionary]$MethodResult,
+        $GuideInfo
     )
 
     $Roles = @($Roles | Where-Object { $_ } | Sort-Object)
@@ -423,6 +445,8 @@ function New-M365ReportRow {
         DaysSinceSignIn   = $days
         DaysText          = if ($null -ne $days) { "$days" } elseif ($signInKnown) { T 'Report.Never' } else { '' }
         DaysSort          = if ($null -ne $days) { $days } elseif ($signInKnown) { [int]::MaxValue } else { -1 }
+        GuideSentAt       = if ($GuideInfo) { $GuideInfo.SentAt } else { $null }
+        GuideSentText     = if ($GuideInfo -and $GuideInfo.SentAt) { $GuideInfo.SentAt.ToString((T 'Format.DateTime')) } else { '' }
         IsInactive        = $signInKnown -and ($null -eq $days -or $days -gt $script:InactiveDays)
         Id                = $User.Id
     }
@@ -497,9 +521,10 @@ function Invoke-M365TenantMfaReport {
             }
         }
         $methods = Get-M365AuthMethodsBatch -UserIds $userIds -Wait $Wait
+        $guides = Get-M365MfaGuideBatch -UserIds $userIds -Wait $Wait
         $rows = foreach ($user in $chunk) {
             $roles = if ($adminRoles.ContainsKey($user.Id)) { @($adminRoles[$user.Id]) } else { @() }
-            New-M365ReportRow -User $user -Roles $roles -MethodResult $methods[$user.Id]
+            New-M365ReportRow -User $user -Roles $roles -MethodResult $methods[$user.Id] -GuideInfo $guides[$user.Id]
         }
         $done += $chunk.Count
         & $OnRows @($rows) $done $users.Count
@@ -538,6 +563,7 @@ function Export-M365MfaReportXlsx {
         @{ Key = 'Report.Col.Roles';           Width = 45; Property = 'AdminRoles' }
         @{ Key = 'Report.Col.MethodCount';     Width = 10; Property = 'MethodCount' }
         @{ Key = 'Report.Col.Methods';         Width = 60; Property = 'Methods' }
+        @{ Key = 'Report.Col.GuideSent';       Width = 18; Property = 'GuideSentAt' }
         @{ Key = 'Report.Col.Enabled';         Width = 9;  Property = 'AccountEnabled' }
         @{ Key = 'Report.Col.Licensed';        Width = 10; Property = 'IsLicensed' }
         @{ Key = 'Report.Col.UserType';        Width = 11; Property = 'UserType' }

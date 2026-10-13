@@ -13,6 +13,7 @@ Mit diesem Tool richten Administratoren und Helpdesk-Mitarbeitende **Multi-Fakto
 - [Bedienung Schritt für Schritt](#bedienung-schritt-für-schritt)
 - [Welche Methode wann?](#welche-methode-wann)
 - [Breakglass-Account erstellen](#breakglass-account-erstellen)
+- [MFA-Anleitung per E-Mail](#mfa-anleitung-per-e-mail)
 - [MFA-Report für den Tenant](#mfa-report-für-den-tenant)
 - [Häufige Fragen und Fehlerbehebung](#häufige-fragen-und-fehlerbehebung)
 - [Sicherheit](#sicherheit)
@@ -31,6 +32,7 @@ Mit diesem Tool richten Administratoren und Helpdesk-Mitarbeitende **Multi-Fakto
 | 👑 | **Admin-Rollen** – zeigt, ob der Benutzer administrative Rechte hat |
 | 📋 | **MFA-Methoden ansehen und löschen** – alle registrierten Methoden mit Datum und Details |
 | ➕ | **Methoden einrichten** – FIDO2-Stick, TOTP-Karten, Temporary Access Pass und Fake-MFA |
+| ✉️ | **MFA-Anleitung per E-Mail** – schickt Benutzern ohne oder mit schwachem MFA eine Schritt-für-Schritt-Anleitung für die Microsoft Authenticator App, in ihrer Sprache und mit Vorschau |
 | 📊 | **MFA-Report für den Tenant** – MFA-Status und letzte Anmeldung aller Benutzer als Ampel, mit Suche, Filtern und farbigem Excel-Export |
 | 🆘 | **Breakglass-Account** – Notfallzugang mit FIDO2-Stick und unbekanntem Kennwort anlegen |
 | 🌐 | **Mehrsprachig** – Englisch (Standard), Deutsch, Spanisch, Französisch, Italienisch, Portugiesisch, Niederländisch und Polnisch |
@@ -149,6 +151,22 @@ Falls die FIDO2-Registrierung fehlschlägt oder abgebrochen wird, bleibt das Kon
 
 ---
 
+## MFA-Anleitung per E-Mail
+
+Hat ein Benutzer **kein oder nur schwaches MFA** (Ampel rot oder gelb), erscheint neben dem MFA-Status der Button **"Anleitung senden …"**. Er schickt dem Benutzer eine E-Mail mit einer einfachen Schritt-für-Schritt-Anleitung: aka.ms/mfasetup öffnen, die App Microsoft Authenticator hinzufügen, QR-Code scannen. Kann oder möchte der Benutzer die App nicht nutzen, bittet die E-Mail ihn, sich bei der IT-Abteilung zu melden – einfach per Antwort auf die E-Mail.
+
+![Vorschau der MFA-Anleitung](images/de/mfa-guide-dialog.png)
+
+- **Erst Vorschau:** Die E-Mail wird genau so angezeigt, wie sie verschickt wird. Gesendet wird erst nach **"E-Mail senden"** und einer Bestätigung.
+- **Sprache des Benutzers:** Die E-Mail wird in der bevorzugten Sprache des Benutzers aus Entra ID geschrieben (sonst in der Sprache des Tenants, sonst Englisch) und lässt sich in der Vorschau ändern.
+- **Absender:** Standardmäßig das eigene Postfach. Alternativ ein freigegebenes Postfach (z. B. das IT-Postfach), für das Sie die Berechtigung *Senden als* haben – Antworten landen dann dort. Der zuletzt verwendete Absender wird gespeichert.
+- **Bilder:** Die Screenshots sind als Inline-Anhänge (Base64) in die E-Mail eingebettet – es wird nichts aus dem Internet nachgeladen, und sie werden auch in Outlook angezeigt.
+- **Versanddatum im Benutzerobjekt:** Nach dem Versand werden Datum, Absender und Sprache in einer Open Extension des Benutzers gespeichert (`com.m365mfatool.mfaGuide`). Open Extensions gibt es nur in Entra ID: Sie sind auch bei synchronisierten (hybriden) Benutzern beschreibbar und werden von Entra Connect / Cloud Sync nie überschrieben – anders als `extensionAttribute1–15`. Das Datum wird unter der Ampel und im MFA-Report (Spalte **"Anleitung gesendet"**) angezeigt.
+
+Die Smartphone-Screenshots in der E-Mail stammen aus der Microsoft-Dokumentation (MicrosoftDocs/entra-docs, MIT-Lizenz); alle Screenshots sind anonymisiert.
+
+---
+
 ## MFA-Report für den Tenant
 
 Über **„MFA-Report …“** oben links prüfen Sie den MFA-Status **aller Benutzer des Tenants** (oder der Mitglieder einer Gruppe inkl. verschachtelter Gruppen) auf einen Blick.
@@ -256,6 +274,16 @@ Zusätzlich für den MFA-Report:
 
 Für die letzte Anmeldung sind zusätzlich eine **Entra ID P1/P2**-Lizenz und eine Rolle nötig, die Anmeldedaten lesen darf, z. B. **Berichtsleser**, **Sicherheitsleseberechtigter** oder **Globaler Leser**. Angezeigt wird die letzte erfolgreiche Anmeldung (interaktiv oder nicht interaktiv); Microsoft erfasst diese seit Dezember 2023, ältere Werte sind der letzte Anmeldeversuch.
 
+Zusätzlich für die MFA-Anleitung:
+
+| Berechtigung | Wofür |
+|---|---|
+| `Mail.Send` | E-Mail aus dem eigenen Postfach senden |
+| `Mail.Send.Shared` | E-Mail aus einem freigegebenen Postfach senden (nur wenn eines eingetragen ist) |
+| `User.ReadWrite.All` | Versanddatum im Benutzerobjekt speichern |
+
+Zum Speichern des Versanddatums ist eine Rolle nötig, die Benutzer ändern darf, z. B. **Benutzeradministrator**.
+
 ### Benötigte Entra-Rollen des eigenen Kontos
 
 | Aufgabe | Rolle |
@@ -290,12 +318,15 @@ In den **Authentifizierungsmethoden-Richtlinien** (Entra Admin Center → Schutz
 | `UI/MainWindow.xaml` | Layout des Hauptfensters |
 | `UI/BreakGlassDialog.xaml` | Dialog für neue Breakglass-Accounts |
 | `UI/TenantReportWindow.xaml` | Fenster des MFA-Reports |
+| `UI/MfaGuideDialog.xaml` | Vorschau-Dialog der MFA-Anleitung |
 | `Modules/Graph.psm1` | Anmeldung, Graph-Anfragen, Benutzer, Domains, Rollen, MFA-Ampel, Lesen/Löschen von Methoden |
 | `Modules/Provisioning.psm1` | Einrichtung von FIDO2, TOTP-Karten, Fake-MFA, TAP und Breakglass-Accounts |
 | `Modules/TenantReport.psm1` | MFA-Report: Benutzer, Rollen, gebündelte Methodenabfragen, Ampelbewertung, Excel-Export |
 | `Modules/Xlsx.psm1` | Schlanker Excel-Writer (.xlsx ohne Excel oder Zusatzmodule) |
+| `Modules/MfaGuideMail.psm1` | MFA-Anleitung: E-Mail in der Sprache des Benutzers, Versand per Graph, Versanddatum im Benutzerobjekt |
 | `Modules/Localization.psm1` | Mehrsprachigkeit: lädt die Sprachdateien und liefert die Texte |
 | `Languages/*.json` | Texte je Sprache (`en.json` ist die Referenz) |
+| `Mail/Images/` | Anonymisierte Screenshots für die E-Mail |
 | `Install-Prerequisites.ps1` | Optionale Vorabinstallation aller Module |
 | `docs/` | Übersetzte Dokumentation und Screenshots |
 | `Logs/` | Tägliche Protokolldateien (werden automatisch angelegt, nicht in Git) |

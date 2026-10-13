@@ -302,14 +302,25 @@
 
                             <!-- MFA traffic light -->
                             <TextBlock Uid="User.MfaStatus" Style="{StaticResource Label}"/>
-                            <Border Name="BdgMfa" CornerRadius="12" Padding="10,4" Margin="0,4,0,0" HorizontalAlignment="Left"
-                                    Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1">
-                                <StackPanel Orientation="Horizontal">
-                                    <Ellipse Name="DotMfa" Width="10" Height="10" Fill="#94A3B8" VerticalAlignment="Center"/>
-                                    <TextBlock Name="TxtMfaLevel" Text="-" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </Border>
-                            <TextBlock Name="TxtMfaHints" Text="" FontSize="11" Foreground="#475569" TextWrapping="Wrap" Margin="2,6,0,10" Visibility="Collapsed"/>
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Name="BdgMfa" CornerRadius="12" Padding="10,4" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                        Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="1">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Name="DotMfa" Width="10" Height="10" Fill="#94A3B8" VerticalAlignment="Center"/>
+                                        <TextBlock Name="TxtMfaLevel" Text="-" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                                <!-- Shown for users without or with weak MFA -->
+                                <Button Grid.Column="1" Name="BtnSendGuide" Uid="Guide.Button" Visibility="Collapsed"
+                                        Padding="10,5" Margin="8,0,0,0" FontSize="12" VerticalAlignment="Center"/>
+                            </Grid>
+                            <TextBlock Name="TxtMfaHints" Text="" FontSize="11" Foreground="#475569" TextWrapping="Wrap" Margin="2,6,0,0" Visibility="Collapsed"/>
+                            <TextBlock Name="TxtGuideStatus" Text="" FontSize="11" Foreground="#475569" TextWrapping="Wrap" Margin="2,6,0,0" Visibility="Collapsed"/>
+                            <Border Height="10"/>
 
                             <!-- Administrative roles -->
                             <TextBlock Uid="User.AdminRoles" Style="{StaticResource Label}" Margin="0,4,0,0"/>

@@ -16,6 +16,7 @@ Con esta herramienta, los administradores y el personal del servicio de asistenc
 - [Guía paso a paso](#guía-paso-a-paso)
 - [¿Qué método usar y cuándo?](#qué-método-usar-y-cuándo)
 - [Crear una cuenta de emergencia](#crear-una-cuenta-de-emergencia)
+- [Guía de MFA por correo](#guía-de-mfa-por-correo)
 - [Informe MFA del inquilino](#informe-mfa-del-inquilino)
 - [Preguntas frecuentes y solución de problemas](#preguntas-frecuentes-y-solución-de-problemas)
 - [Seguridad](#seguridad)
@@ -34,6 +35,7 @@ Con esta herramienta, los administradores y el personal del servicio de asistenc
 | 👑 | **Roles de administrador** – muestra si el usuario tiene derechos administrativos |
 | 📋 | **Ver y eliminar métodos MFA** – todos los métodos registrados con fecha y detalles |
 | ➕ | **Configurar métodos** – llave FIDO2, tarjetas TOTP, Temporary Access Pass y MFA ficticia |
+| ✉️ | **Guía de MFA por correo** – envía a los usuarios sin MFA o con MFA débil una guía paso a paso para la aplicación Microsoft Authenticator, en su idioma y con vista previa |
 | 📊 | **Informe MFA del inquilino** – estado MFA y último inicio de sesión de todos los usuarios como semáforo, con búsqueda, filtros y exportación a Excel en color |
 | 🆘 | **Cuenta de emergencia** – crear un acceso de emergencia (break-glass) con llave FIDO2 y contraseña desconocida |
 | 🌐 | **Multilingüe** – inglés (predeterminado), alemán, español, francés, italiano, portugués, neerlandés y polaco |
@@ -152,6 +154,22 @@ Si el registro de FIDO2 falla o se cancela, la cuenta sigue protegida con MFA fi
 
 ---
 
+## Guía de MFA por correo
+
+Si un usuario **no tiene MFA o solo tiene MFA débil** (semáforo rojo o amarillo), junto al estado de MFA aparece el botón **"Enviar guía …"**. Envía al usuario un correo con una guía sencilla paso a paso: abrir aka.ms/mfasetup, agregar la aplicación Microsoft Authenticator y escanear el código QR. Si el usuario no puede o no quiere usar la aplicación, el correo le pide que contacte con el departamento de TI, simplemente respondiendo al correo.
+
+![Vista previa de la guía de MFA](images/en/mfa-guide-dialog.png)
+
+- **Primero la vista previa:** el correo se muestra exactamente como se enviará. Solo se envía tras **"Enviar correo"** y una confirmación.
+- **Idioma del usuario:** el correo se redacta en el idioma preferido del usuario en Entra ID (si no, en el del inquilino; si no, en inglés) y se puede cambiar en la vista previa.
+- **Remitente:** de forma predeterminada, su propio buzón. También puede indicar un buzón compartido (p. ej. el de TI) para el que tenga el permiso *Enviar como*; las respuestas llegarán allí. Se recuerda el último remitente.
+- **Imágenes:** las capturas se incrustan en el correo como datos adjuntos en línea (Base64): no se carga nada de Internet y también se muestran en Outlook.
+- **Fecha de envío en el objeto de usuario:** tras el envío, la fecha, el remitente y el idioma se guardan en una open extension del usuario (`com.m365mfatool.mfaGuide`). Las open extensions solo existen en Entra ID: también se pueden escribir en usuarios sincronizados (híbridos) y Entra Connect / Cloud Sync nunca las sobrescribe, a diferencia de `extensionAttribute1–15`. La fecha se muestra bajo el semáforo y en el informe MFA (columna **"Guía enviada"**).
+
+Las capturas del smartphone del correo proceden de la documentación de Microsoft (MicrosoftDocs/entra-docs, licencia MIT); todas las capturas están anonimizadas.
+
+---
+
 ## Informe MFA del inquilino
 
 Haga clic en **"Informe MFA …"** arriba a la izquierda para comprobar de una vez el estado MFA de **todos los usuarios del inquilino** (o de los miembros de un grupo, incluidos los grupos anidados).
@@ -259,6 +277,16 @@ Además, para el informe MFA:
 
 El último inicio de sesión requiere además una licencia **Entra ID P1/P2** y un rol que pueda leer los datos de inicio de sesión, p. ej. **Lector de informes**, **Lector de seguridad** o **Lector global**. Se muestra el último inicio de sesión correcto (interactivo o no interactivo); Microsoft lo registra desde diciembre de 2023, los valores anteriores corresponden al último intento de inicio de sesión.
 
+Además, para la guía de MFA:
+
+| Permiso | Para qué |
+|---|---|
+| `Mail.Send` | Enviar el correo desde su propio buzón |
+| `Mail.Send.Shared` | Enviar el correo desde un buzón compartido (solo si se indica uno) |
+| `User.ReadWrite.All` | Guardar la fecha de envío en el objeto de usuario |
+
+Para guardar la fecha de envío se necesita un rol que pueda modificar usuarios, p. ej. **Administrador de usuarios**.
+
 ### Roles de Entra necesarios para su propia cuenta
 
 | Tarea | Rol |
@@ -293,12 +321,15 @@ En la **directiva de métodos de autenticación** (Centro de administración de 
 | `UI/MainWindow.xaml` | Diseño de la ventana principal |
 | `UI/BreakGlassDialog.xaml` | Diálogo para nuevas cuentas de emergencia |
 | `UI/TenantReportWindow.xaml` | Ventana del informe MFA |
+| `UI/MfaGuideDialog.xaml` | Diálogo de vista previa de la guía de MFA |
 | `Modules/Graph.psm1` | Inicio de sesión, solicitudes a Graph, usuarios, dominios, roles, semáforo de MFA, lectura/eliminación de métodos |
 | `Modules/Provisioning.psm1` | Configuración de FIDO2, tarjetas TOTP, MFA ficticia, TAP y cuentas de emergencia |
 | `Modules/TenantReport.psm1` | Informe MFA: usuarios, roles, consultas de métodos agrupadas, valoración en semáforo, exportación a Excel |
 | `Modules/Xlsx.psm1` | Escritor ligero de Excel (.xlsx sin Excel ni módulos adicionales) |
+| `Modules/MfaGuideMail.psm1` | Guía de MFA: correo en el idioma del usuario, envío mediante Graph, fecha de envío en el objeto de usuario |
 | `Modules/Localization.psm1` | Multilingüismo: carga los archivos de idioma y proporciona los textos |
 | `Languages/*.json` | Textos por idioma (`en.json` es la referencia) |
+| `Mail/Images/` | Capturas anonimizadas para el correo |
 | `Install-Prerequisites.ps1` | Instalación previa opcional de todos los módulos |
 | `docs/` | Documentación traducida y capturas de pantalla |
 | `Logs/` | Archivos de registro diarios (se crean automáticamente, no se guardan en Git) |

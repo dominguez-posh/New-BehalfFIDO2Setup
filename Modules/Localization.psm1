@@ -98,4 +98,31 @@ function T {
     $text
 }
 
-Export-ModuleMember -Function Initialize-Localization, Set-UiLanguage, Get-UiLanguage, Get-UiLanguages, Test-UiText, T
+$script:LanguageCache = @{}
+
+function Get-LanguageText {
+    <#
+    .SYNOPSIS
+        Returns a text in a specific language, independent of the UI language (e.g. for emails to users).
+        Missing texts fall back to English.
+    .EXAMPLE
+        Get-LanguageText -Language 'fr' -Key 'Mail.Greeting' -Arguments 'Anna'
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Language,
+        [Parameter(Mandatory)][string]$Key,
+        [object[]]$Arguments
+    )
+    if (-not $script:LanguageCache.ContainsKey($Language)) {
+        $file = Join-Path $script:LanguagePath "$Language.json"
+        $script:LanguageCache[$Language] = if (Test-Path -LiteralPath $file) { Import-LanguageFile -Path $file } else { @{} }
+    }
+    $strings = $script:LanguageCache[$Language]
+    $text = if ($strings.ContainsKey($Key) -and $strings[$Key]) { $strings[$Key] }
+            elseif ($script:Fallback.ContainsKey($Key)) { $script:Fallback[$Key] }
+            else { $Key }
+    if ($Arguments -and $Arguments.Count) { return ($text -f $Arguments) }
+    $text
+}
+
+Export-ModuleMember -Function Initialize-Localization, Set-UiLanguage, Get-UiLanguage, Get-UiLanguages, Test-UiText, T, Get-LanguageText

@@ -29,9 +29,11 @@ $script:AppRoot = Split-Path -Parent $PSCommandPath
 Import-Module (Join-Path $script:AppRoot 'Modules\Localization.psm1') -Force -Global
 Import-Module (Join-Path $script:AppRoot 'Modules\Graph.psm1') -Force -Global
 Import-Module (Join-Path $script:AppRoot 'Modules\Provisioning.psm1') -Force
+# -Global: the tenant report also reads the sending date of the MFA guide
+Import-Module (Join-Path $script:AppRoot 'Modules\MfaGuideMail.psm1') -Force -Global
 Import-Module (Join-Path $script:AppRoot 'Modules\TenantReport.psm1') -Force
 
-# User settings (currently only the language)
+# User settings: language and sender mailbox of the MFA guide
 $script:SettingsPath = Join-Path $env:APPDATA 'M365MfaTool\settings.json'
 
 # Daily log files (Logs\yyyy-MM-dd.log); fallback if the tool folder is not writable
@@ -47,19 +49,20 @@ function Read-Settings {
         }
     }
     catch { }
-    [pscustomobject]@{ Language = 'en' }
+    [pscustomobject]@{ Language = 'en'; GuideSender = '' }
 }
 
 function Save-Settings {
     try {
         $folder = Split-Path -Parent $script:SettingsPath
         if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
-        [pscustomobject]@{ Language = Get-UiLanguage } | ConvertTo-Json | Set-Content -LiteralPath $script:SettingsPath -Encoding UTF8
+        [pscustomobject]@{ Language = Get-UiLanguage; GuideSender = $script:GuideSender } | ConvertTo-Json | Set-Content -LiteralPath $script:SettingsPath -Encoding UTF8
     }
     catch { }
 }
 
 $settings = Read-Settings
+$script:GuideSender = if ($settings.PSObject.Properties['GuideSender']) { [string]$settings.GuideSender } else { '' }
 Initialize-Localization -Path (Join-Path $script:AppRoot 'Languages') -Language $(if ($settings.PSObject.Properties['Language']) { $settings.Language } else { 'en' })
 
 [xml]$xaml = Get-Content -LiteralPath (Join-Path $script:AppRoot 'UI\MainWindow.xaml') -Raw -Encoding UTF8
@@ -75,7 +78,7 @@ $controlNames = @(
     # Selected user
     'TxtSelectedName', 'TxtSelectedUpn', 'TxtSelectedId', 'BtnCopyUpn', 'BtnCopyId'
     'TxtMethodCount', 'TxtPreferredMethod', 'TxtSystemPreferred'
-    'BdgMfa', 'DotMfa', 'TxtMfaLevel', 'TxtMfaHints', 'TxtRoleSummary', 'BtnShowRoles', 'LstRoles'
+    'BdgMfa', 'DotMfa', 'TxtMfaLevel', 'TxtMfaHints', 'BtnSendGuide', 'TxtGuideStatus', 'TxtRoleSummary', 'BtnShowRoles', 'LstRoles'
     # Configure method
     'CmbMethod', 'PnlSerial', 'LblSerial', 'TxtSerial', 'PnlSecret', 'PwdSecret', 'TxtMethodHint', 'BtnExecute'
     # Result: Temporary Access Pass
@@ -92,6 +95,8 @@ foreach ($name in $controlNames) {
 $script:Context = $null
 $script:SelectedUser = $null
 $script:SelectedMethod = $null
+$script:SelectedAssessment = $null   # MFA traffic light of the selected user
+$script:GuideInfo = $null            # When the MFA guide was last sent to the selected user
 $script:TapResult = $null
 $script:TotpSetup = $null
 $script:ColumnKeys = @{}
@@ -162,6 +167,7 @@ function Update-DynamicTexts {
     Update-MethodInputs
     Update-MethodsHeader
     Update-RolesToggle
+    Update-GuideView
     if ($null -ne $script:TapResult) { Show-TapResult -Tap $script:TapResult }
     if ($null -ne $script:TotpSetup) { Show-TotpResult -Setup $script:TotpSetup }
     if (@($script:DgUsers.ItemsSource).Count -gt 1) { Set-UserHitsText @($script:DgUsers.ItemsSource).Count }
@@ -301,6 +307,7 @@ function Set-Busy {
     $script:BtnDeleteMethod.IsEnabled    = -not $Busy -and $connected -and $canDelete
     $script:BtnCopyUpn.IsEnabled         = $hasUser
     $script:BtnCopyId.IsEnabled          = $hasUser
+    $script:BtnSendGuide.IsEnabled       = -not $Busy -and $connected -and $hasUser
     [System.Windows.Forms.Application]::DoEvents()
 }
 
@@ -437,6 +444,26 @@ function Set-MfaIndicator {
     $script:TxtMfaHints.Visibility = if ($hints.Count) { 'Visible' } else { 'Collapsed' }
 }
 
+function Update-GuideView {
+    <#
+    .SYNOPSIS
+        Shows the button for the MFA guide (users without or with weak MFA) and when it was last sent.
+    #>
+    $level = if ($script:SelectedAssessment) { $script:SelectedAssessment.Level } else { $null }
+    $script:BtnSendGuide.Visibility = if ($level -in 'Red', 'Yellow') { 'Visible' } else { 'Collapsed' }
+
+    $info = $script:GuideInfo
+    if ($null -eq $script:SelectedAssessment) {
+        $script:TxtGuideStatus.Visibility = 'Collapsed'
+        return
+    }
+    $script:TxtGuideStatus.Text = if ($null -eq $info) { T 'Guide.Status.NotSent' }
+        elseif ($info.Count -gt 1) { T 'Guide.Status.SentMultiple' (Format-UiDate $info.SentAt) $info.SentBy $info.Count }
+        else { T 'Guide.Status.Sent' (Format-UiDate $info.SentAt) $info.SentBy }
+    # Only of interest if the user still needs MFA or the guide was already sent
+    $script:TxtGuideStatus.Visibility = if ($level -in 'Red', 'Yellow' -or $null -ne $info) { 'Visible' } else { 'Collapsed' }
+}
+
 function Update-RolesToggle {
     $script:BtnShowRoles.Content = if ($script:LstRoles.Visibility -eq 'Visible') { T 'User.HideRoles' } else { T 'User.ShowRoles' }
 }
@@ -477,6 +504,9 @@ function Clear-MfaView {
     $script:TxtSystemPreferred.Text = '-'
     Set-MfaIndicator $null
     Set-AdminRoles -Roles @() -Status '-'
+    $script:SelectedAssessment = $null
+    $script:GuideInfo = $null
+    Update-GuideView
 }
 
 function Update-MethodsHeader {
@@ -581,6 +611,15 @@ function Update-MfaView {
 
         $assessment = Get-M365MfaAssessment -Methods $methods -HasAdminRoles ($roles.Count -gt 0)
         Set-MfaIndicator $assessment
+        $script:SelectedAssessment = $assessment
+        try {
+            $script:GuideInfo = Get-M365MfaGuideInfo -UserId $user.Id
+        }
+        catch {
+            $script:GuideInfo = $null
+            Write-UiLog (T 'Guide.InfoFailed' $_.Exception.Message) 'Warning'
+        }
+        Update-GuideView
         Write-UiLog (T 'Log.MfaStatus' $assessment.Title) $(if ($assessment.Level -eq 'Green') { 'Success' } else { 'Warning' })
 
         try {
@@ -893,6 +932,143 @@ $BtnSaveTotpQr.Add_Click({
 })
 
 $BtnHideTotp.Add_Click({ Hide-TotpResult })
+
+#endregion
+
+#region MFA guide by email
+
+function Update-GuidePreview {
+    # Builds the email in the selected language and shows it in the preview.
+    $d = $script:GuideDialog
+    $language = if ($d.CmbGuideLanguage.SelectedItem) { $d.CmbGuideLanguage.SelectedItem.Code } else { $d.Recipient.Language }
+    try {
+        $d.Mail = New-M365MfaGuideMail -Recipient $d.Recipient -Language $language
+        $d.TxtGuideSubject.Text = $d.Mail.Subject
+        # The preview shows the images as data: URIs (the email itself uses inline attachments).
+        [IO.File]::WriteAllText($d.PreviewFile, (Get-M365MfaGuidePreviewHtml -Mail $d.Mail), [Text.UTF8Encoding]::new($true))
+        $d.WebGuidePreview.Navigate([Uri]$d.PreviewFile)
+    }
+    catch {
+        $d.Mail = $null
+        Show-Message -Text (T 'Guide.PreviewFailed' $_.Exception.Message) -Title (T 'Guide.Title') -Icon Error
+    }
+}
+
+function Show-MfaGuideDialog {
+    <#
+    .SYNOPSIS
+        Shows the email preview. Returns sender and email after "Send", otherwise $null.
+    #>
+    param([Parameter(Mandatory)]$Recipient)
+
+    [xml]$dialogXaml = Get-Content -LiteralPath (Join-Path $script:AppRoot 'UI\MfaGuideDialog.xaml') -Raw -Encoding UTF8
+    $dialog = [Windows.Markup.XamlReader]::Load([System.Xml.XmlNodeReader]::new($dialogXaml))
+    $dialog.Owner = $window
+    Update-ElementTexts -Root $dialog
+
+    $script:GuideDialog = @{
+        Window      = $dialog
+        Recipient   = $Recipient
+        Mail        = $null
+        PreviewFile = Join-Path ([IO.Path]::GetTempPath()) ('M365MfaTool-guide-{0}.html' -f [guid]::NewGuid())
+    }
+    foreach ($name in 'TxtGuideTo', 'TxtGuideFrom', 'CmbGuideLanguage', 'TxtGuideLanguageHint', 'TxtGuideSubject', 'WebGuidePreview', 'BtnGuideSend') {
+        $script:GuideDialog[$name] = $dialog.FindName($name)
+    }
+    $d = $script:GuideDialog
+
+    $d.TxtGuideTo.Text = '{0} <{1}>' -f $Recipient.DisplayName, $Recipient.Mail
+    $d.TxtGuideFrom.Text = if ($script:GuideSender) { $script:GuideSender } else { $script:Context.Account }
+    $languages = @(Get-UiLanguages)
+    $d.CmbGuideLanguage.ItemsSource = $languages
+    $d.CmbGuideLanguage.SelectedItem = $languages | Where-Object Code -eq $Recipient.Language | Select-Object -First 1
+    $d.TxtGuideLanguageHint.Text = switch ($Recipient.LanguageSource) {
+        'User'         { T 'Guide.LanguageSource.User' $Recipient.PreferredLanguage }
+        'Organization' { T 'Guide.LanguageSource.Organization' }
+        default        { T 'Guide.LanguageSource.Default' }
+    }
+
+    $d.CmbGuideLanguage.Add_SelectionChanged({ Update-GuidePreview })
+    $d.BtnGuideSend.Add_Click({
+        $state = $script:GuideDialog
+        if ($state.TxtGuideFrom.Text.Trim() -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') {
+            Show-Message -Text (T 'Guide.InvalidSender') -Title (T 'Guide.Title')
+            $state.TxtGuideFrom.Focus() | Out-Null
+            return
+        }
+        if ($null -eq $state.Mail) { return }
+        $state.Window.DialogResult = $true
+    })
+    $dialog.Add_ContentRendered({ Update-GuidePreview })
+
+    try {
+        if (-not $dialog.ShowDialog()) { return $null }
+        [pscustomobject]@{ Sender = $d.TxtGuideFrom.Text.Trim(); Mail = $d.Mail }
+    }
+    finally {
+        $d.WebGuidePreview.Dispose()
+        Remove-Item -LiteralPath $d.PreviewFile -Force -ErrorAction SilentlyContinue
+        $script:GuideDialog = $null
+    }
+}
+
+$BtnSendGuide.Add_Click({
+    $user = $script:SelectedUser
+    if ($null -eq $user) { return }
+
+    try {
+        Set-Busy $true
+        $recipient = Get-M365MfaGuideRecipient -UserId $user.Id
+    }
+    catch {
+        Write-UiError -Message (T 'Guide.PreviewFailed' $_.Exception.Message) -Title (T 'Guide.Title')
+        return
+    }
+    finally {
+        Set-Busy $false
+    }
+    if (-not $recipient.Mail) {
+        Show-Message -Text (T 'Guide.NoMail' $recipient.UserPrincipalName) -Title (T 'Guide.Title') -Icon Warning
+        return
+    }
+
+    $result = Show-MfaGuideDialog -Recipient $recipient
+    if ($null -eq $result) { return }
+    $languageName = (Get-UiLanguages | Where-Object Code -eq $result.Mail.Language | Select-Object -First 1).Name
+    $question = T 'Guide.Confirm' $recipient.DisplayName $recipient.Mail $result.Sender $languageName
+    if (-not (Confirm-Action -Text $question -Title (T 'Guide.Title') -Icon Question -DefaultYes)) { return }
+
+    $sent = $false
+    try {
+        Set-Busy $true
+        Write-UiLog (T 'Log.GuideScopes')
+        Update-UiNow
+        $sharedMailbox = $result.Sender -ne $script:Context.Account
+        Set-ConnectionStatus (Request-M365GraphScopes -Scopes (Get-M365MfaGuideScopes -SharedMailbox $sharedMailbox))
+        Send-M365MfaGuideMail -Sender $result.Sender -Recipient $recipient -Mail $result.Mail
+        $sent = $true
+        Write-UiLog (T 'Guide.Sent' $recipient.Mail $languageName $result.Sender) 'Success'
+
+        # Remember the sender mailbox for the next time
+        $script:GuideSender = $result.Sender
+        Save-Settings
+
+        Set-M365MfaGuideInfo -UserId $recipient.Id -SentBy $script:Context.Account -Language $result.Mail.Language
+        $script:GuideInfo = Get-M365MfaGuideInfo -UserId $recipient.Id
+        Update-GuideView
+    }
+    catch {
+        if ($sent) {
+            Write-UiError -Message (T 'Guide.AttributeFailed' $_.Exception.Message) -Title (T 'Guide.Title')
+        }
+        else {
+            Write-UiError -Message ((T 'Guide.SendFailed' $_.Exception.Message) + "`n`n" + (T 'Guide.SendFailedHint')) -Title (T 'Guide.Title')
+        }
+    }
+    finally {
+        Set-Busy $false
+    }
+})
 
 #endregion
 

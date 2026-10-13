@@ -13,6 +13,7 @@ With this tool, administrators and help desk staff set up **multi-factor authent
 - [Step-by-step guide](#step-by-step-guide)
 - [Which method when?](#which-method-when)
 - [Create a break-glass account](#create-a-break-glass-account)
+- [MFA setup guide by email](#mfa-setup-guide-by-email)
 - [Tenant MFA report](#tenant-mfa-report)
 - [FAQ and troubleshooting](#faq-and-troubleshooting)
 - [Security](#security)
@@ -31,6 +32,7 @@ With this tool, administrators and help desk staff set up **multi-factor authent
 | 👑 | **Admin roles** – shows whether the user has administrative rights |
 | 📋 | **View and delete MFA methods** – all registered methods with date and details |
 | ➕ | **Set up methods** – FIDO2 key, TOTP cards, Temporary Access Pass and fake MFA |
+| ✉️ | **MFA setup guide by email** – sends users without or with weak MFA a step-by-step guide for the Microsoft Authenticator app, in their language and with preview |
 | 📊 | **Tenant MFA report** – MFA status and last sign-in of all users as a traffic light, with search, filters and colored Excel export |
 | 🆘 | **Break-glass account** – create an emergency access account with a FIDO2 key and an unknown password |
 | 🌐 | **Multilingual** – English (default), German, Spanish, French, Italian, Portuguese, Dutch and Polish |
@@ -149,6 +151,22 @@ If FIDO2 registration fails or is cancelled, the account stays protected with fa
 
 ---
 
+## MFA setup guide by email
+
+If a user has **no MFA or only weak MFA** (traffic light red or yellow), the button **"Send setup guide …"** appears next to the MFA status. It sends the user an email with a simple step-by-step guide: open aka.ms/mfasetup, add the Microsoft Authenticator app, scan the QR code. If the user cannot or does not want to use the app, the email asks them to contact the IT department – simply by replying to the email.
+
+![Preview of the MFA setup guide](docs/images/en/mfa-guide-dialog.png)
+
+- **Preview first:** the email is shown exactly as it will be sent. It is only sent after **"Send email"** and a confirmation.
+- **Language of the user:** the email is written in the user's preferred language from Entra ID (otherwise the tenant language, otherwise English) and can be changed in the preview.
+- **Sender:** by default your own mailbox. You can enter a shared mailbox (e.g. the IT mailbox) for which you have *Send As* permission – replies then go there. The last sender is remembered.
+- **Images:** the screenshots are embedded in the email as inline attachments (Base64) – nothing is loaded from the internet, and they are displayed in Outlook too.
+- **Sending date in the user object:** after sending, date, sender and language are stored in an open extension of the user (`com.m365mfatool.mfaGuide`). Open extensions exist only in Entra ID: they are writable for synchronized (hybrid) users too and are never overwritten by Entra Connect / Cloud Sync – unlike `extensionAttribute1–15`. The date is shown below the traffic light and in the tenant MFA report (column **"Guide sent"**).
+
+The smartphone screenshots in the email come from the Microsoft documentation (MicrosoftDocs/entra-docs, MIT license); all screenshots are anonymized.
+
+---
+
 ## Tenant MFA report
 
 Click **"MFA report …"** in the top left to check the MFA status of **all users of the tenant** (or of the members of a group, incl. nested groups) at once.
@@ -256,6 +274,16 @@ Additionally for the tenant MFA report:
 
 The last sign-in additionally requires an **Entra ID P1/P2** license and a role that may read sign-in data, e.g. **Reports Reader**, **Security Reader** or **Global Reader**. It shows the last successful sign-in (interactive or non-interactive); Microsoft records this since December 2023, older values are the last sign-in attempt.
 
+Additionally for the MFA setup guide:
+
+| Permission | Purpose |
+|---|---|
+| `Mail.Send` | Send the email from your own mailbox |
+| `Mail.Send.Shared` | Send the email from a shared mailbox (only if one is entered) |
+| `User.ReadWrite.All` | Store the sending date in the user object |
+
+Storing the sending date requires a role that may update users, e.g. **User Administrator**.
+
 ### Required Entra roles for your own account
 
 | Task | Role |
@@ -290,12 +318,15 @@ In the **authentication methods policy** (Entra admin center → Protection → 
 | `UI/MainWindow.xaml` | Main window layout |
 | `UI/BreakGlassDialog.xaml` | Dialog for new break-glass accounts |
 | `UI/TenantReportWindow.xaml` | Window of the tenant MFA report |
+| `UI/MfaGuideDialog.xaml` | Preview dialog of the MFA setup guide |
 | `Modules/Graph.psm1` | Sign-in, Graph requests, users, domains, roles, MFA traffic light, reading/deleting methods |
 | `Modules/Provisioning.psm1` | Setup of FIDO2, TOTP cards, fake MFA, TAP and break-glass accounts |
 | `Modules/TenantReport.psm1` | Tenant MFA report: users, roles, batched method queries, traffic light rating, Excel export |
 | `Modules/Xlsx.psm1` | Minimal Excel writer (.xlsx without Excel or additional modules) |
+| `Modules/MfaGuideMail.psm1` | MFA setup guide: email in the user's language, sending via Graph, sending date in the user object |
 | `Modules/Localization.psm1` | Localization: loads the language files and provides the texts |
 | `Languages/*.json` | Texts per language (`en.json` is the reference) |
+| `Mail/Images/` | Anonymized screenshots for the email |
 | `Install-Prerequisites.ps1` | Optional advance installation of all modules |
 | `docs/` | Translated documentation and screenshots |
 | `Logs/` | Daily log files (created automatically, not stored in Git) |
