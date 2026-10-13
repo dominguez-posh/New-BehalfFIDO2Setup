@@ -243,7 +243,7 @@
 
     "Log.Group": "Protokoll",
     "Log.Started": "Anwendung gestartet. Bitte zuerst an Microsoft 365 anmelden.",
-    "Log.SigningIn": "Interaktive Anmeldung an Microsoft Graph wird gestartet.",
+    "Log.SigningIn": "Interaktive Anmeldung an Microsoft Graph wird gestartet. Das Microsoft-Anmeldefenster öffnet sich vor dem Tool – falls es nicht sichtbar ist, bitte in der Taskleiste nachsehen.",
     "Log.SignedIn": "Anmeldung erfolgreich: {0}",
     "Log.SignedOut": "Microsoft-Graph-Sitzung wurde getrennt.",
     "Log.Searching": "Benutzersuche: {0}",
@@ -278,6 +278,7 @@
     "Log.FileLocation": "Das Protokoll wird zusätzlich gespeichert in: {0}",
     "Log.FileFailed": "Das Protokoll konnte nicht in eine Datei geschrieben werden und wird nur hier angezeigt: {0}",
     "Header.Installing": "Komponenten werden installiert …",
+    "Header.SigningIn": "Anmeldung läuft – bitte im Microsoft-Fenster fortfahren …",
     "Title.Prerequisites": "Komponenten installieren",
     "Modules.ConfirmInstall": "Folgende Komponenten fehlen und werden jetzt aus der PowerShell Gallery für Ihren Windows-Benutzer installiert (keine Administratorrechte nötig):\n\n{0}\n\nDas dauert etwa ein bis zwei Minuten. Jetzt installieren?",
     "Modules.InstallingProgress": "Installiere Komponente {0} von {1}: {2} ...",

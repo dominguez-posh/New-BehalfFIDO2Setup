@@ -616,6 +616,8 @@ $BtnLogin.Add_Click({
         Set-Busy $true
         # Install missing modules first, visibly in the GUI (instead of console prompts in the background)
         if (-not (Install-MissingModules)) { return }
+        $TxtConnectionStatus.Text = T 'Header.SigningIn'
+        $TxtConnectionStatus.Foreground = '#FCD34D'
         Write-UiLog (T 'Log.SigningIn')
         $context = Connect-M365Graph
         Set-ConnectionStatus $context

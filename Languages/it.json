@@ -243,7 +243,7 @@
 
     "Log.Group": "Log",
     "Log.Started": "Applicazione avviata. Accedere prima a Microsoft 365.",
-    "Log.SigningIn": "Avvio dell'accesso interattivo a Microsoft Graph.",
+    "Log.SigningIn": "Avvio dell'accesso interattivo a Microsoft Graph. La finestra di accesso Microsoft si apre davanti allo strumento; se non è visibile, controllare la barra delle applicazioni.",
     "Log.SignedIn": "Accesso riuscito: {0}",
     "Log.SignedOut": "Sessione di Microsoft Graph disconnessa.",
     "Log.Searching": "Ricerca utenti: {0}",
@@ -278,6 +278,7 @@
     "Log.FileLocation": "Il log viene salvato anche in: {0}",
     "Log.FileFailed": "Impossibile scrivere il log in un file; viene mostrato solo qui: {0}",
     "Header.Installing": "Installazione dei componenti …",
+    "Header.SigningIn": "Accesso in corso – continuare nella finestra Microsoft …",
     "Title.Prerequisites": "Installa componenti",
     "Modules.ConfirmInstall": "Mancano i seguenti componenti, che verranno ora installati dalla PowerShell Gallery per il proprio utente Windows (non sono necessari diritti di amministratore):\n\n{0}\n\nRichiede circa uno o due minuti. Installare ora?",
     "Modules.InstallingProgress": "Installazione del componente {0} di {1}: {2} ...",

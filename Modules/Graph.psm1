@@ -165,6 +165,67 @@ function Assert-GraphModules {
 
 #region Connection
 
+if (-not ('M365MfaTool.NativeWindow' -as [type])) {
+    Add-Type -Namespace M365MfaTool -Name NativeWindow -MemberDefinition @'
+[DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+[DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
+[DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int command);
+[DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+[DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int cx, int cy, uint flags);
+[StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+'@
+}
+
+function Invoke-InteractiveSignIn {
+    <#
+    .SYNOPSIS
+        Runs an interactive sign-in so that the Microsoft sign-in dialog is visible in the foreground.
+    .DESCRIPTION
+        The sign-in dialog (Web Account Manager) belongs to the PowerShell console window. Start.cmd
+        starts the console minimized, and Windows hides windows whose owner is minimized - the dialog
+        would stay invisible behind the tool. Therefore the console is shown centered over the tool
+        while signing in and minimized again afterwards; then the tool is activated again.
+    #>
+    param([Parameter(Mandatory)][scriptblock]$Action)
+
+    $native = [M365MfaTool.NativeWindow]
+    $active = $native::GetForegroundWindow()
+    # GA_ROOTOWNER (3): with Windows Terminal, the console window is a hidden pseudo window owned by the terminal.
+    $console = $native::GetAncestor($native::GetConsoleWindow(), 3)
+    $state = if ($console -eq [IntPtr]::Zero) { 'None' }
+             elseif ($native::IsIconic($console)) { 'Minimized' }
+             elseif (-not $native::IsWindowVisible($console)) { 'Hidden' }
+             else { 'Visible' }
+
+    if ($state -in 'Minimized', 'Hidden') {
+        [void]$native::ShowWindow($console, 9)   # SW_RESTORE
+        $toolRect = New-Object M365MfaTool.NativeWindow+RECT
+        $consoleRect = New-Object M365MfaTool.NativeWindow+RECT
+        if ($active -ne [IntPtr]::Zero -and $native::GetWindowRect($active, [ref]$toolRect) -and $native::GetWindowRect($console, [ref]$consoleRect)) {
+            # Center the console (and with it the sign-in dialog) over the tool: SWP_NOSIZE | SWP_NOZORDER
+            $x = [int](($toolRect.Left + $toolRect.Right - ($consoleRect.Right - $consoleRect.Left)) / 2)
+            $y = [int](($toolRect.Top + $toolRect.Bottom - ($consoleRect.Bottom - $consoleRect.Top)) / 2)
+            [void]$native::SetWindowPos($console, [IntPtr]::Zero, $x, $y, 0, 0, 0x0001 -bor 0x0004)
+        }
+    }
+    if ($state -ne 'None') { [void]$native::SetForegroundWindow($console) }
+
+    try {
+        & $Action
+    }
+    finally {
+        switch ($state) {
+            'Minimized' { [void]$native::ShowWindow($console, 6) }   # SW_MINIMIZE
+            'Hidden'    { [void]$native::ShowWindow($console, 0) }   # SW_HIDE
+        }
+        if ($active -ne [IntPtr]::Zero) { [void]$native::SetForegroundWindow($active) }
+    }
+}
+
 function Test-M365GraphConnection {
     <#
     .SYNOPSIS
@@ -184,7 +245,7 @@ function Connect-M365Graph {
     Assert-GraphModules
 
     try {
-        Connect-MgGraph -Scopes $script:GraphScopes -NoWelcome -ErrorAction Stop | Out-Null
+        Invoke-InteractiveSignIn { Connect-MgGraph -Scopes $script:GraphScopes -NoWelcome -ErrorAction Stop | Out-Null }
     }
     catch {
         throw (T 'Graph.ConnectFailed' $_.Exception.Message)
@@ -215,7 +276,8 @@ function Request-M365GraphScopes {
     $missing = @($Scopes | Where-Object { @($context.Scopes) -notcontains $_ })
     if ($missing.Count) {
         try {
-            Connect-MgGraph -Scopes (@($script:GraphScopes) + $Scopes | Select-Object -Unique) -NoWelcome -ErrorAction Stop | Out-Null
+            $allScopes = @($script:GraphScopes) + $Scopes | Select-Object -Unique
+            Invoke-InteractiveSignIn { Connect-MgGraph -Scopes $allScopes -NoWelcome -ErrorAction Stop | Out-Null }
         }
         catch {
             throw (T 'Graph.ScopesDenied' ($missing -join ', ') $_.Exception.Message)

@@ -243,7 +243,7 @@
 
     "Log.Group": "Logboek",
     "Log.Started": "Toepassing gestart. Meld u eerst aan bij Microsoft 365.",
-    "Log.SigningIn": "Interactieve aanmelding bij Microsoft Graph wordt gestart.",
+    "Log.SigningIn": "Interactieve aanmelding bij Microsoft Graph wordt gestart. Het Microsoft-aanmeldvenster opent vóór de tool – als het niet zichtbaar is, kijk dan in de taakbalk.",
     "Log.SignedIn": "Aanmelding geslaagd: {0}",
     "Log.SignedOut": "Microsoft Graph-sessie is verbroken.",
     "Log.Searching": "Gebruiker zoeken: {0}",
@@ -278,6 +278,7 @@
     "Log.FileLocation": "Het logboek wordt ook opgeslagen in: {0}",
     "Log.FileFailed": "Het logboek kon niet naar een bestand worden geschreven en wordt alleen hier getoond: {0}",
     "Header.Installing": "Onderdelen worden geïnstalleerd …",
+    "Header.SigningIn": "Aanmelden – ga verder in het Microsoft-venster …",
     "Title.Prerequisites": "Onderdelen installeren",
     "Modules.ConfirmInstall": "De volgende onderdelen ontbreken en worden nu vanuit de PowerShell Gallery voor uw Windows-gebruiker geïnstalleerd (geen beheerdersrechten nodig):\n\n{0}\n\nDit duurt een tot twee minuten. Nu installeren?",
     "Modules.InstallingProgress": "Onderdeel {0} van {1} installeren: {2} ...",

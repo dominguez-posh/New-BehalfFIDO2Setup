@@ -243,7 +243,7 @@
 
     "Log.Group": "Dziennik",
     "Log.Started": "Aplikacja uruchomiona. Najpierw zaloguj się do Microsoft 365.",
-    "Log.SigningIn": "Rozpoczynanie interaktywnego logowania do Microsoft Graph.",
+    "Log.SigningIn": "Rozpoczynanie interaktywnego logowania do Microsoft Graph. Okno logowania Microsoft otwiera się przed narzędziem – jeśli go nie widać, sprawdź pasek zadań.",
     "Log.SignedIn": "Zalogowano pomyślnie: {0}",
     "Log.SignedOut": "Sesja Microsoft Graph została rozłączona.",
     "Log.Searching": "Wyszukiwanie użytkowników: {0}",
@@ -278,6 +278,7 @@
     "Log.FileLocation": "Dziennik jest także zapisywany w: {0}",
     "Log.FileFailed": "Nie można zapisać dziennika do pliku; jest wyświetlany tylko tutaj: {0}",
     "Header.Installing": "Instalowanie składników …",
+    "Header.SigningIn": "Logowanie – kontynuuj w oknie Microsoft …",
     "Title.Prerequisites": "Instalacja składników",
     "Modules.ConfirmInstall": "Brakuje następujących składników. Zostaną one teraz zainstalowane z galerii PowerShell dla Twojego użytkownika Windows (uprawnienia administratora nie są wymagane):\n\n{0}\n\nPotrwa to minutę lub dwie. Zainstalować teraz?",
     "Modules.InstallingProgress": "Instalowanie składnika {0} z {1}: {2} ...",

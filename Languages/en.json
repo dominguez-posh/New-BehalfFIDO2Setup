@@ -243,7 +243,7 @@
 
     "Log.Group": "Log",
     "Log.Started": "Application started. Please sign in to Microsoft 365 first.",
-    "Log.SigningIn": "Starting interactive sign-in to Microsoft Graph.",
+    "Log.SigningIn": "Starting interactive sign-in to Microsoft Graph. The Microsoft sign-in window opens in front of the tool – if it is not visible, check the taskbar.",
     "Log.SignedIn": "Signed in successfully: {0}",
     "Log.SignedOut": "Microsoft Graph session disconnected.",
     "Log.Searching": "User search: {0}",
@@ -278,6 +278,7 @@
     "Log.FileLocation": "The log is also saved to: {0}",
     "Log.FileFailed": "The log could not be written to a file and is only shown here: {0}",
     "Header.Installing": "Installing components …",
+    "Header.SigningIn": "Signing in – please continue in the Microsoft window …",
     "Title.Prerequisites": "Install components",
     "Modules.ConfirmInstall": "The following components are missing and will now be installed from the PowerShell Gallery for your Windows user (no administrator rights required):\n\n{0}\n\nThis takes about one to two minutes. Install now?",
     "Modules.InstallingProgress": "Installing component {0} of {1}: {2} ...",

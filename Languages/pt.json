@@ -243,7 +243,7 @@
 
     "Log.Group": "Registo",
     "Log.Started": "Aplicação iniciada. Inicie primeiro sessão no Microsoft 365.",
-    "Log.SigningIn": "A iniciar o início de sessão interativo no Microsoft Graph.",
+    "Log.SigningIn": "A iniciar o início de sessão interativo no Microsoft Graph. A janela de início de sessão da Microsoft abre-se à frente da ferramenta – se não estiver visível, verifique a barra de tarefas.",
     "Log.SignedIn": "Sessão iniciada com êxito: {0}",
     "Log.SignedOut": "Sessão do Microsoft Graph terminada.",
     "Log.Searching": "Pesquisa de utilizadores: {0}",
@@ -278,6 +278,7 @@
     "Log.FileLocation": "O registo também é guardado em: {0}",
     "Log.FileFailed": "Não foi possível escrever o registo num ficheiro; é mostrado apenas aqui: {0}",
     "Header.Installing": "A instalar componentes …",
+    "Header.SigningIn": "A iniciar sessão – continue na janela da Microsoft …",
     "Title.Prerequisites": "Instalar componentes",
     "Modules.ConfirmInstall": "Faltam os seguintes componentes, que vão ser instalados agora a partir da Galeria do PowerShell para o seu utilizador do Windows (não são necessários direitos de administrador):\n\n{0}\n\nIsto demora um a dois minutos. Instalar agora?",
     "Modules.InstallingProgress": "A instalar o componente {0} de {1}: {2} ...",

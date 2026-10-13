@@ -243,7 +243,7 @@
 
     "Log.Group": "Journal",
     "Log.Started": "Application démarrée. Veuillez d'abord vous connecter à Microsoft 365.",
-    "Log.SigningIn": "Démarrage de la connexion interactive à Microsoft Graph.",
+    "Log.SigningIn": "Démarrage de la connexion interactive à Microsoft Graph. La fenêtre de connexion Microsoft s'ouvre devant l'outil – si elle n'est pas visible, vérifiez la barre des tâches.",
     "Log.SignedIn": "Connexion réussie : {0}",
     "Log.SignedOut": "Session Microsoft Graph déconnectée.",
     "Log.Searching": "Recherche d'utilisateurs : {0}",
@@ -278,6 +278,7 @@
     "Log.FileLocation": "Le journal est également enregistré dans : {0}",
     "Log.FileFailed": "Le journal n'a pas pu être écrit dans un fichier et n'est affiché qu'ici : {0}",
     "Header.Installing": "Installation des composants …",
+    "Header.SigningIn": "Connexion en cours – continuez dans la fenêtre Microsoft …",
     "Title.Prerequisites": "Installer les composants",
     "Modules.ConfirmInstall": "Les composants suivants sont manquants et vont maintenant être installés depuis PowerShell Gallery pour votre utilisateur Windows (aucun droit d'administrateur requis) :\n\n{0}\n\nCela prend une à deux minutes. Installer maintenant ?",
     "Modules.InstallingProgress": "Installation du composant {0} sur {1} : {2} ...",
