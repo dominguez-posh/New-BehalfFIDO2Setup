@@ -160,19 +160,22 @@
         <Border Grid.Row="0" Background="#0F172A" Padding="24,15">
             <Grid>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <StackPanel>
+                <Button Name="BtnTenantReport" Uid="Header.TenantReport" IsEnabled="False" Style="{StaticResource HeaderButton}"
+                        VerticalAlignment="Center" Margin="0,0,20,0"/>
+                <StackPanel Grid.Column="1">
                     <TextBlock Text="M365 MFA Administration" Foreground="White" FontSize="24" FontWeight="SemiBold"/>
                     <TextBlock Uid="Header.Subtitle" Foreground="#CBD5E1" FontSize="13" Margin="0,4,0,0"/>
                 </StackPanel>
-                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0">
+                <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0">
                     <TextBlock Name="TxtConnectionStatus" Text="-" Foreground="#FCA5A5" FontWeight="SemiBold" HorizontalAlignment="Right"/>
                     <TextBlock Name="TxtTenant" Text="Tenant: -" Foreground="#CBD5E1" FontSize="12" Margin="0,4,0,0" HorizontalAlignment="Right"/>
                 </StackPanel>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Name="BtnBreakGlass" Uid="Header.BreakGlass" IsEnabled="False" Style="{StaticResource HeaderButton}"/>
                     <ComboBox Name="CmbLanguage" Uid="Header.Language" Width="120" Margin="4" Padding="8,7" VerticalContentAlignment="Center"
                               DisplayMemberPath="Name"/>

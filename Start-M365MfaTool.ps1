@@ -29,6 +29,7 @@ $script:AppRoot = Split-Path -Parent $PSCommandPath
 Import-Module (Join-Path $script:AppRoot 'Modules\Localization.psm1') -Force -Global
 Import-Module (Join-Path $script:AppRoot 'Modules\Graph.psm1') -Force -Global
 Import-Module (Join-Path $script:AppRoot 'Modules\Provisioning.psm1') -Force
+Import-Module (Join-Path $script:AppRoot 'Modules\TenantReport.psm1') -Force
 
 # User settings (currently only the language)
 $script:SettingsPath = Join-Path $env:APPDATA 'M365MfaTool\settings.json'
@@ -66,7 +67,7 @@ $window = [Windows.Markup.XamlReader]::Load([System.Xml.XmlNodeReader]::new($xam
 
 $controlNames = @(
     # Header and connection
-    'TxtConnectionStatus', 'TxtTenant', 'BtnBreakGlass', 'CmbLanguage', 'BtnLogin', 'BtnLogout'
+    'BtnTenantReport', 'TxtConnectionStatus', 'TxtTenant', 'BtnBreakGlass', 'CmbLanguage', 'BtnLogin', 'BtnLogout'
     # User search (results in popup)
     'TxtSearch', 'BtnSearch', 'PopUsers', 'TxtUserHits', 'DgUsers'
     # MFA methods
@@ -94,6 +95,8 @@ $script:SelectedMethod = $null
 $script:TapResult = $null
 $script:TotpSetup = $null
 $script:ColumnKeys = @{}
+$script:ReportData = $null   # Last tenant MFA report (kept while signed in)
+$script:Rpt = $null          # Controls and state of the open report window
 
 # Input fields and hints per method (key = method ID from the Tag in the dropdown)
 $script:MethodUi = @{
@@ -290,6 +293,7 @@ function Set-Busy {
     $script:BtnLogin.IsEnabled           = -not $Busy -and -not $connected
     $script:BtnLogout.IsEnabled          = -not $Busy -and $connected
     $script:BtnBreakGlass.IsEnabled      = -not $Busy -and $connected
+    $script:BtnTenantReport.IsEnabled    = -not $Busy -and $connected
     $script:CmbLanguage.IsEnabled        = -not $Busy
     $script:BtnSearch.IsEnabled          = -not $Busy -and $connected
     $script:BtnExecute.IsEnabled         = -not $Busy -and $hasUser
@@ -630,6 +634,7 @@ $BtnLogin.Add_Click({
 $BtnLogout.Add_Click({
     try {
         Disconnect-M365Graph
+        $script:ReportData = $null
         $PopUsers.IsOpen = $false
         $DgUsers.ItemsSource = $null
         Clear-SelectedUser
@@ -997,6 +1002,381 @@ $BtnBreakGlass.Add_Click({
     Show-Message -Text ($summary -join "`n") -Title (T 'BreakGlass.Title') -Icon $(if ($result.Warnings.Count) { 'Warning' } else { 'Information' })
 
     Select-User -User $result.User
+})
+
+#endregion
+
+#region Tenant MFA report
+
+function New-ReportData {
+    [pscustomobject]@{
+        TenantId   = if ($script:Context) { $script:Context.TenantId } else { '' }
+        TenantName = $null
+        ScopeText  = ''
+        Rows       = New-Object System.Collections.ObjectModel.ObservableCollection[object]
+        Counts     = @{ Red = 0; Yellow = 0; Green = 0; Unknown = 0; AdminsRed = 0 }
+    }
+}
+
+function Set-ReportStatus {
+    param([string]$Message)
+    $script:Rpt.TxtRptStatus.Text = $Message
+    [System.Windows.Forms.Application]::DoEvents()
+}
+
+function Set-ReportBusy {
+    param([bool]$Busy)
+    $r = $script:Rpt
+    $r.Running = $Busy
+    foreach ($control in $r.CmbRptScope, $r.PnlRptGroup, $r.ChkRptEnabledOnly, $r.ChkRptGuests, $r.BtnRptStart) {
+        $control.IsEnabled = -not $Busy
+    }
+    $r.BtnRptCancel.IsEnabled = $Busy
+    $r.BtnRptExport.IsEnabled = -not $Busy -and $script:ReportData.Rows.Count -gt 0
+    $r.PrgRpt.Visibility = if ($Busy) { 'Visible' } else { 'Hidden' }
+    [System.Windows.Forms.Application]::DoEvents()
+}
+
+function Update-ReportCounts {
+    $r = $script:Rpt
+    $data = $script:ReportData
+    $r.TxtRptCountAll.Text = "$($data.Rows.Count)"
+    $r.TxtRptCountRed.Text = "$($data.Counts.Red)"
+    $r.TxtRptCountYellow.Text = "$($data.Counts.Yellow)"
+    $r.TxtRptCountGreen.Text = "$($data.Counts.Green)"
+    $r.TxtRptCountAdminsRed.Text = "$($data.Counts.AdminsRed)"
+    $r.TxtRptVisible.Text = if ($data.Rows.Count) { T 'Report.Status.Visible' $r.View.Count $data.Rows.Count } else { '' }
+    $r.TxtRptEmpty.Visibility = if ($data.Rows.Count) { 'Collapsed' } else { 'Visible' }
+}
+
+function Update-ReportFilter {
+    $r = $script:Rpt
+    $r.SearchText = $r.TxtRptSearch.Text.Trim()
+    $r.AdminsOnly = [bool]$r.ChkRptAdminsOnly.IsChecked
+    $r.View.Refresh()
+    Update-ReportCounts
+}
+
+function Get-ReportFilterText {
+    # Description of the active filters for the Excel summary
+    $r = $script:Rpt
+    $parts = @(
+        if ($r.LevelFilter) { T "Report.Tile.$($r.LevelFilter)" }
+        if ($r.AdminsOnly) { T 'Report.AdminsOnly' }
+        if ($r.SearchText) { T 'Report.Summary.SearchFor' $r.SearchText }
+    )
+    $parts -join '; '
+}
+
+function Add-ReportRows {
+    param([object[]]$Rows, [int]$Done, [int]$Total)
+    $data = $script:ReportData
+    foreach ($row in $Rows) {
+        # One search string per row keeps the search filter fast
+        $searchText = @($row.DisplayName, $row.UserPrincipalName, $row.Mail, $row.AdminRoles, $row.Methods, $row.Reason,
+            $row.LevelText, $row.Department, $row.JobTitle, $row.UserType, $row.Id) -join ' '
+        $row | Add-Member -NotePropertyName SearchText -NotePropertyValue $searchText
+        $data.Rows.Add($row)
+        $data.Counts[$row.Level]++
+        if ($row.IsAdmin -and $row.Level -eq 'Red') { $data.Counts.AdminsRed++ }
+    }
+    $script:Rpt.PrgRpt.IsIndeterminate = $false
+    $script:Rpt.PrgRpt.Value = if ($Total) { 100 * $Done / $Total } else { 100 }
+    Update-ReportCounts
+    Set-ReportStatus (T 'Report.Progress.Methods' $Done $Total)
+}
+
+function Start-TenantReport {
+    $r = $script:Rpt
+    $groupId = $null
+    if ([string]$r.CmbRptScope.SelectedItem.Tag -eq 'Group') {
+        $group = $r.CmbRptGroup.SelectedItem
+        if ($null -eq $group) {
+            Show-Message -Text (T 'Report.SelectGroup') -Title (T 'Report.Title')
+            return
+        }
+        $groupId = $group.Id
+        $scopeText = T 'Report.Scope.GroupName' $group.DisplayName
+    }
+    else {
+        $scopeText = T 'Report.Scope.All'
+    }
+    $enabledOnly = [bool]$r.ChkRptEnabledOnly.IsChecked
+    $includeGuests = [bool]$r.ChkRptGuests.IsChecked
+    if ($enabledOnly) { $scopeText += ', ' + (T 'Report.EnabledOnly') }
+    if ($includeGuests) { $scopeText += ', ' + (T 'Report.IncludeGuests') }
+
+    # Start with an empty list; the new collection gets its own view.
+    $script:ReportData = New-ReportData
+    $script:ReportData.ScopeText = $scopeText
+    Connect-ReportView
+    $r.Cancel = $false
+    $r.PrgRpt.IsIndeterminate = $true
+    $started = Get-Date
+
+    try {
+        Set-ReportBusy $true
+        try {
+            Set-ConnectionStatus (Request-M365GraphScopes -Scopes (Get-M365ReportScopes))
+        }
+        catch {
+            # Without group permissions, only roles assigned via groups are missing; a group scope needs them.
+            if ($groupId) { throw }
+            Write-UiLog $_.Exception.Message 'Warning'
+        }
+        $script:ReportData.TenantId = $script:Context.TenantId
+        $script:ReportData.TenantName = Get-M365OrganizationName
+        Set-ReportTenantText
+        Write-UiLog (T 'Log.ReportStarted' $scopeText)
+
+        $result = Invoke-M365TenantMfaReport -GroupId $groupId -IncludeDisabled:(-not $enabledOnly) -IncludeGuests:$includeGuests `
+            -OnProgress { param($Message) Set-ReportStatus $Message } `
+            -OnWarning { param($Message) Write-UiLog $Message 'Warning' } `
+            -OnRows { param($Rows, $Done, $Total) Add-ReportRows -Rows $Rows -Done $Done -Total $Total } `
+            -ShouldCancel { $script:Rpt.Cancel } `
+            -Wait { param($Milliseconds) Wait-Ui $Milliseconds }
+
+        $counts = $script:ReportData.Counts
+        $duration = (Get-Date) - $started
+        if ($result.Cancelled) {
+            Set-ReportStatus (T 'Report.Status.Cancelled' $result.Done $result.Total)
+            Write-UiLog (T 'Report.Status.Cancelled' $result.Done $result.Total) 'Warning'
+        }
+        else {
+            Set-ReportStatus (T 'Report.Status.Done' $result.Total ('{0:hh\:mm\:ss}' -f $duration))
+            Write-UiLog (T 'Log.ReportFinished' $result.Total $counts.Red $counts.Yellow $counts.Green) 'Success'
+        }
+        if (-not $result.Total) { $r.TxtRptEmpty.Text = T 'Report.Status.NoUsers' }
+    }
+    catch {
+        Set-ReportStatus ''
+        Write-UiError -Message (T 'Report.Failed' $_.Exception.Message) -Title (T 'Report.Title')
+    }
+    finally {
+        Set-ReportBusy $false
+        if ($r.CloseRequested) { $r.Window.Close() }
+    }
+}
+
+function Set-ReportTenantText {
+    $data = $script:ReportData
+    $name = if ($data.TenantName) { '{0} ({1})' -f $data.TenantName, $data.TenantId } else { $data.TenantId }
+    $script:Rpt.TxtRptTenant.Text = T 'Header.Tenant' $name
+}
+
+function Connect-ReportView {
+    # Own view per window and collection: sorted red -> yellow -> green, filtered by tile, admins and search.
+    $r = $script:Rpt
+    $view = [System.Windows.Data.ListCollectionView]::new($script:ReportData.Rows)
+    $view.SortDescriptions.Add((New-Object System.ComponentModel.SortDescription 'LevelOrder', 'Ascending'))
+    $view.SortDescriptions.Add((New-Object System.ComponentModel.SortDescription 'DisplayName', 'Ascending'))
+    $view.Filter = [Predicate[object]]{
+        param($row)
+        $state = $script:Rpt
+        if ($state.LevelFilter -and $row.Level -ne $state.LevelFilter) { return $false }
+        if ($state.AdminsOnly -and -not $row.IsAdmin) { return $false }
+        if ($state.SearchText -and $row.SearchText.IndexOf($state.SearchText, [StringComparison]::OrdinalIgnoreCase) -lt 0) { return $false }
+        $true
+    }
+    $r.View = $view
+    $r.DgRpt.ItemsSource = $view
+    Update-ReportCounts
+}
+
+function Export-TenantReport {
+    $r = $script:Rpt
+    $rows = @($r.View | ForEach-Object { $_ })
+    if (-not $rows.Count) {
+        Show-Message -Text (T 'Report.NothingToExport') -Title (T 'Report.Title')
+        return
+    }
+
+    $data = $script:ReportData
+    $fileName = 'MFA-Status_{0}_{1:yyyy-MM-dd}.xlsx' -f $(if ($data.TenantName) { $data.TenantName } else { $data.TenantId }), (Get-Date)
+    foreach ($char in [System.IO.Path]::GetInvalidFileNameChars()) { $fileName = $fileName.Replace([string]$char, '_') }
+
+    $dialog = New-Object Microsoft.Win32.SaveFileDialog
+    $dialog.Title = T 'Report.Export'
+    $dialog.Filter = (T 'Report.ExcelFilter') + ' (*.xlsx)|*.xlsx'
+    $dialog.FileName = $fileName
+    if (-not $dialog.ShowDialog($r.Window)) { return }
+
+    try {
+        Set-ReportBusy $true
+        Set-ReportStatus (T 'Report.Exporting' $rows.Count)
+        $tenant = if ($data.TenantName) { '{0} ({1})' -f $data.TenantName, $data.TenantId } else { $data.TenantId }
+        Export-M365MfaReportXlsx -Path $dialog.FileName -Rows $rows -Tenant $tenant -ScopeText $data.ScopeText -FilterText (Get-ReportFilterText)
+        Set-ReportStatus (T 'Report.Exported' $dialog.FileName)
+        Write-UiLog (T 'Report.Exported' $dialog.FileName) 'Success'
+    }
+    catch {
+        Set-ReportStatus ''
+        Write-UiError -Message (T 'Report.ExportFailed' $_.Exception.Message) -Title (T 'Report.Title')
+        return
+    }
+    finally {
+        Set-ReportBusy $false
+    }
+
+    if (Confirm-Action -Text (T 'Report.OpenFile' $dialog.FileName) -Title (T 'Report.Title') -Icon Question -DefaultYes) {
+        Start-Process -FilePath $dialog.FileName
+    }
+}
+
+function Show-TenantReportWindow {
+    <#
+    .SYNOPSIS
+        Shows the tenant MFA report. Returns the user double-clicked in the list, otherwise $null.
+    #>
+    [xml]$reportXaml = Get-Content -LiteralPath (Join-Path $script:AppRoot 'UI\TenantReportWindow.xaml') -Raw -Encoding UTF8
+    $dialog = [Windows.Markup.XamlReader]::Load([System.Xml.XmlNodeReader]::new($reportXaml))
+    $dialog.Owner = $window
+    Update-ElementTexts -Root $dialog
+
+    $script:Rpt = @{
+        Window = $dialog; View = $null; Running = $false; Cancel = $false; CloseRequested = $false
+        LevelFilter = $null; AdminsOnly = $false; SearchText = ''; SelectedUser = $null
+    }
+    foreach ($name in @(
+        'TxtRptTenant', 'CmbRptScope', 'PnlRptGroup', 'TxtRptGroupSearch', 'BtnRptFindGroup', 'CmbRptGroup'
+        'ChkRptEnabledOnly', 'ChkRptGuests', 'BtnRptStart', 'BtnRptCancel'
+        'RbRptAll', 'RbRptRed', 'RbRptYellow', 'RbRptGreen'
+        'TxtRptCountAll', 'TxtRptCountRed', 'TxtRptCountYellow', 'TxtRptCountGreen', 'TxtRptCountAdminsRed'
+        'TxtRptSearch', 'ChkRptAdminsOnly', 'TxtRptVisible', 'BtnRptExport', 'DgRpt', 'TxtRptEmpty', 'PrgRpt', 'TxtRptStatus'
+    )) {
+        $script:Rpt[$name] = $dialog.FindName($name)
+    }
+    $r = $script:Rpt
+
+    # Column headers contain the text key; the date column uses the date format of the language.
+    foreach ($column in $r.DgRpt.Columns) { $column.Header = T ([string]$column.Header) }
+    $dateColumn = $r.DgRpt.Columns | Where-Object { $_.SortMemberPath -eq 'PasswordLastSet' }
+    $binding = New-Object System.Windows.Data.Binding 'PasswordLastSet'
+    $binding.StringFormat = T 'Format.DateTime'
+    $dateColumn.Binding = $binding
+
+    # Keep the last report of this tenant, so it is still there when the window is reopened.
+    $tenantId = if ($script:Context) { $script:Context.TenantId } else { '' }
+    if ($null -eq $script:ReportData -or $script:ReportData.TenantId -ne $tenantId) { $script:ReportData = New-ReportData }
+    Set-ReportTenantText
+    Connect-ReportView
+    Set-ReportBusy $false
+    Set-ReportStatus $(if ($script:ReportData.Rows.Count) { T 'Report.Status.Previous' $script:ReportData.ScopeText } else { '' })
+
+    $r.CmbRptScope.Add_SelectionChanged({
+        $script:Rpt.PnlRptGroup.Visibility = if ([string]$script:Rpt.CmbRptScope.SelectedItem.Tag -eq 'Group') { 'Visible' } else { 'Collapsed' }
+    })
+
+    $findGroup = {
+        $state = $script:Rpt
+        $term = $state.TxtRptGroupSearch.Text.Trim()
+        if (-not $term) {
+            Show-Message -Text (T 'Report.GroupSearchEmpty') -Title (T 'Report.Title')
+            return
+        }
+        try {
+            Set-ReportBusy $true
+            Set-ConnectionStatus (Request-M365GraphScopes -Scopes (Get-M365ReportScopes))
+            $groups = @(Find-M365Group -SearchTerm $term)
+        }
+        catch {
+            Write-UiError -Message $_.Exception.Message -Title (T 'Report.Title')
+            return
+        }
+        finally {
+            Set-ReportBusy $false
+        }
+        $state.CmbRptGroup.ItemsSource = $groups
+        if ($groups.Count) {
+            $state.CmbRptGroup.SelectedIndex = 0
+            if ($groups.Count -gt 1) { $state.CmbRptGroup.IsDropDownOpen = $true }
+            Set-ReportStatus (T 'Report.GroupsFound' $groups.Count)
+        }
+        else {
+            Show-Message -Text (T 'Report.NoGroups' $term) -Title (T 'Report.Title')
+        }
+    }
+    $r.BtnRptFindGroup.Add_Click($findGroup)
+    $r.TxtRptGroupSearch.Add_KeyDown({
+        param($src, $keyArgs)
+        if ($keyArgs.Key -eq 'Enter') { $script:Rpt.BtnRptFindGroup.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent)) }
+    })
+
+    $r.BtnRptStart.Add_Click({ Start-TenantReport })
+    $r.BtnRptCancel.Add_Click({
+        $script:Rpt.Cancel = $true
+        $script:Rpt.BtnRptCancel.IsEnabled = $false
+        Set-ReportStatus (T 'Report.Status.Cancelling')
+    })
+    $r.BtnRptExport.Add_Click({ Export-TenantReport })
+
+    # Tiles filter by traffic light level
+    foreach ($tile in @(
+        @{ Button = $r.RbRptAll; Level = $null }
+        @{ Button = $r.RbRptRed; Level = 'Red' }
+        @{ Button = $r.RbRptYellow; Level = 'Yellow' }
+        @{ Button = $r.RbRptGreen; Level = 'Green' }
+    )) {
+        $tile.Button.Tag = $tile.Level
+        $tile.Button.Add_Checked({
+            param($src)
+            $script:Rpt.LevelFilter = if ($src.Tag) { [string]$src.Tag } else { $null }
+            Update-ReportFilter
+        })
+    }
+    $r.ChkRptAdminsOnly.Add_Click({ Update-ReportFilter })
+
+    # Search: filter shortly after the last keystroke
+    $r.SearchTimer = New-Object System.Windows.Threading.DispatcherTimer
+    $r.SearchTimer.Interval = [TimeSpan]::FromMilliseconds(300)
+    $r.SearchTimer.Add_Tick({
+        $script:Rpt.SearchTimer.Stop()
+        Update-ReportFilter
+    })
+    $r.TxtRptSearch.Add_TextChanged({
+        $script:Rpt.SearchTimer.Stop()
+        $script:Rpt.SearchTimer.Start()
+    })
+
+    # Double-click on a row: close the report and open the user in the main window
+    $r.DgRpt.Add_MouseDoubleClick({
+        param($src, $mouseArgs)
+        $element = $mouseArgs.OriginalSource
+        while ($null -ne $element -and $element -isnot [System.Windows.Controls.DataGridRow]) {
+            $element = if ($element -is [System.Windows.Media.Visual]) { [System.Windows.Media.VisualTreeHelper]::GetParent($element) } else { $null }
+        }
+        if ($null -eq $element -or $script:Rpt.Running) { return }
+        $row = $element.Item
+        $script:Rpt.SelectedUser = [pscustomobject]@{
+            Id                = $row.Id
+            DisplayName       = $row.DisplayName
+            UserPrincipalName = $row.UserPrincipalName
+            Mail              = $row.Mail
+            AccountEnabled    = $row.AccountEnabled
+        }
+        $script:Rpt.Window.Close()
+    })
+
+    # Closing during a running report: cancel first, the window closes after the current batch.
+    $dialog.Add_Closing({
+        param($src, $closingArgs)
+        if ($script:Rpt.Running) {
+            $script:Rpt.Cancel = $true
+            $script:Rpt.CloseRequested = $true
+            $closingArgs.Cancel = $true
+            Set-ReportStatus (T 'Report.Status.Cancelling')
+        }
+    })
+
+    $dialog.ShowDialog() | Out-Null
+    $r.SearchTimer.Stop()
+    $script:Rpt.SelectedUser
+}
+
+$BtnTenantReport.Add_Click({
+    $user = Show-TenantReportWindow
+    $script:Rpt = $null
+    if ($null -ne $user) { Select-User -User $user }
 })
 
 #endregion

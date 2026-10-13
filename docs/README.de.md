@@ -13,6 +13,7 @@ Mit diesem Tool richten Administratoren und Helpdesk-Mitarbeitende **Multi-Fakto
 - [Bedienung Schritt für Schritt](#bedienung-schritt-für-schritt)
 - [Welche Methode wann?](#welche-methode-wann)
 - [Breakglass-Account erstellen](#breakglass-account-erstellen)
+- [MFA-Report für den Tenant](#mfa-report-für-den-tenant)
 - [Häufige Fragen und Fehlerbehebung](#häufige-fragen-und-fehlerbehebung)
 - [Sicherheit](#sicherheit)
 - [Für Administratoren: Voraussetzungen und Berechtigungen](#für-administratoren-voraussetzungen-und-berechtigungen)
@@ -30,6 +31,7 @@ Mit diesem Tool richten Administratoren und Helpdesk-Mitarbeitende **Multi-Fakto
 | 👑 | **Admin-Rollen** – zeigt, ob der Benutzer administrative Rechte hat |
 | 📋 | **MFA-Methoden ansehen und löschen** – alle registrierten Methoden mit Datum und Details |
 | ➕ | **Methoden einrichten** – FIDO2-Stick, TOTP-Karten, Temporary Access Pass und Fake-MFA |
+| 📊 | **MFA-Report für den Tenant** – MFA-Status aller Benutzer als Ampel, mit Suche, Filtern und farbigem Excel-Export |
 | 🆘 | **Breakglass-Account** – Notfallzugang mit FIDO2-Stick und unbekanntem Kennwort anlegen |
 | 🌐 | **Mehrsprachig** – Englisch (Standard), Deutsch, Spanisch, Französisch, Italienisch, Portugiesisch, Niederländisch und Polnisch |
 
@@ -147,6 +149,26 @@ Falls die FIDO2-Registrierung fehlschlägt oder abgebrochen wird, bleibt das Kon
 
 ---
 
+## MFA-Report für den Tenant
+
+Über **„MFA-Report …“** oben links prüfen Sie den MFA-Status **aller Benutzer des Tenants** (oder der Mitglieder einer Gruppe inkl. verschachtelter Gruppen) auf einen Blick.
+
+1. Umfang wählen: **Alle Benutzer** oder **Mitglieder einer Gruppe** (Gruppe über den Namensanfang oder die Objekt-ID suchen). Standardmäßig werden nur aktivierte Konten und keine Gastkonten berücksichtigt.
+2. **„Report erstellen“** klicken. Die Liste füllt sich, während die Methoden gelesen werden (20 Benutzer je Graph-Anfrage). **„Abbrechen“** stoppt nach dem aktuellen Block.
+3. Die Kacheln zeigen die Anzahl je Ampelfarbe – **ein Klick auf eine Kachel filtert** die Liste. Zusätzlich können Sie **suchen** (Name, UPN, E-Mail, Rollen, Methoden, Bewertung, Abteilung) und **nur Administratoren** anzeigen.
+4. **„Excel-Export …“** speichert die aktuell angezeigten Einträge als `.xlsx` in Ampelfarben, inklusive Blatt „Zusammenfassung“. Weder Excel noch ein Zusatzmodul ist nötig.
+5. **Doppelklick** auf einen Benutzer schließt den Report und öffnet den Benutzer im Hauptfenster zur Bearbeitung. Der Report bleibt bis zur Abmeldung erhalten.
+
+| Ampel | Bedeutung |
+|---|---|
+| 🔴 **Rot** | Kein MFA (nur Kennwort) **oder** Admin-Rolle mit nur unsicherem MFA (SMS/Anruf, TAP oder Fake-MFA) |
+| 🟡 **Gelb** | Nur unsicheres MFA (SMS/Anruf, TAP oder Fake-MFA) **oder** Administrator ohne phishing-resistentes MFA (FIDO2, Passkey, Windows Hello) |
+| 🟢 **Grün** | Starkes MFA – bei Administratoren phishing-resistent |
+
+Als administrative Rollen zählen aktive und PIM-berechtigte Rollen (markiert mit „(PIM)“) sowie Rollen, die über Gruppen zugewiesen sind.
+
+---
+
 ## Häufige Fragen und Fehlerbehebung
 
 **Beim Doppelklick auf `Start.cmd` passiert nichts oder es erscheint eine Fehlermeldung.**
@@ -219,6 +241,12 @@ Zusätzlich beim ersten Breakglass-Account:
 | `Domain.Read.All` | Domains zur Auswahl anzeigen |
 | `RoleManagement.ReadWrite.Directory` | Global Administrator zuweisen |
 
+Zusätzlich für den MFA-Report:
+
+| Berechtigung | Wofür |
+|---|---|
+| `GroupMember.Read.All` | Gruppe als Umfang wählen, über Gruppen zugewiesene Admin-Rollen auflösen |
+
 ### Benötigte Entra-Rollen des eigenen Kontos
 
 | Aufgabe | Rolle |
@@ -252,8 +280,10 @@ In den **Authentifizierungsmethoden-Richtlinien** (Entra Admin Center → Schutz
 | `Start-M365MfaTool.ps1` | Oberfläche, Zustandsverwaltung und Ereignisse |
 | `UI/MainWindow.xaml` | Layout des Hauptfensters |
 | `UI/BreakGlassDialog.xaml` | Dialog für neue Breakglass-Accounts |
+| `UI/TenantReportWindow.xaml` | Fenster des MFA-Reports |
 | `Modules/Graph.psm1` | Anmeldung, Graph-Anfragen, Benutzer, Domains, Rollen, MFA-Ampel, Lesen/Löschen von Methoden |
 | `Modules/Provisioning.psm1` | Einrichtung von FIDO2, TOTP-Karten, Fake-MFA, TAP und Breakglass-Accounts |
+| `Modules/TenantReport.psm1` | MFA-Report: Benutzer, Rollen, gebündelte Methodenabfragen, Ampelbewertung, Excel-Export |
 | `Modules/Localization.psm1` | Mehrsprachigkeit: lädt die Sprachdateien und liefert die Texte |
 | `Languages/*.json` | Texte je Sprache (`en.json` ist die Referenz) |
 | `Install-Prerequisites.ps1` | Optionale Vorabinstallation aller Module |

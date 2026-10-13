@@ -502,27 +502,40 @@ function Get-M365UserAuthMethods {
         $uri = $response['@odata.nextLink']
     }
 
-    foreach ($raw in $items) {
-        $type = [string]$raw['@odata.type']
-        $info = $script:AuthMethodTypes[$type]
+    foreach ($raw in $items) { ConvertTo-M365AuthMethod -Raw $raw }
+}
 
-        $displayName = @($raw['displayName'], $raw['phoneNumber'], $raw['emailAddress']) |
-            Where-Object { -not [string]::IsNullOrWhiteSpace("$_") } |
-            Select-Object -First 1
+function ConvertTo-M365AuthMethod {
+    <#
+    .SYNOPSIS
+        Converts a raw Graph authentication method into the display object.
+    .PARAMETER SkipDetails
+        Omits Summary and PropertyText (faster, used by the tenant report).
+    #>
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Raw,
+        [switch]$SkipDetails
+    )
 
-        [pscustomobject]@{
-            Id           = [string]$raw['id']
-            Type         = $type
-            TypeName     = if ($info) { T $info.Name } else { $type -replace '^#microsoft\.graph\.', '' }
-            DisplayName  = if ($displayName) { "$displayName" } else { '-' }
-            Summary      = Get-MethodSummary -Type $type -Raw $raw
-            Created      = ConvertTo-LocalDate $raw['createdDateTime']
-            CanDelete    = [bool]($info -and $info.Segment)
-            Segment      = if ($info) { $info.Segment } else { $null }
-            Strength     = if ($info) { $info.Strength } else { 'Strong' }
-            IsFakeMfa    = Test-FakeMfaMethod -Type $type -Raw $raw
-            PropertyText = @(ConvertTo-PropertyLines -Object $raw) -join [Environment]::NewLine
-        }
+    $type = [string]$Raw['@odata.type']
+    $info = $script:AuthMethodTypes[$type]
+
+    $displayName = @($Raw['displayName'], $Raw['phoneNumber'], $Raw['emailAddress']) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace("$_") } |
+        Select-Object -First 1
+
+    [pscustomobject]@{
+        Id           = [string]$Raw['id']
+        Type         = $type
+        TypeName     = if ($info) { T $info.Name } else { $type -replace '^#microsoft\.graph\.', '' }
+        DisplayName  = if ($displayName) { "$displayName" } else { '-' }
+        Summary      = if ($SkipDetails) { '' } else { Get-MethodSummary -Type $type -Raw $Raw }
+        Created      = ConvertTo-LocalDate $Raw['createdDateTime']
+        CanDelete    = [bool]($info -and $info.Segment)
+        Segment      = if ($info) { $info.Segment } else { $null }
+        Strength     = if ($info) { $info.Strength } else { 'Strong' }
+        IsFakeMfa    = Test-FakeMfaMethod -Type $type -Raw $Raw
+        PropertyText = if ($SkipDetails) { '' } else { @(ConvertTo-PropertyLines -Object $Raw) -join [Environment]::NewLine }
     }
 }
 
@@ -712,8 +725,10 @@ Export-ModuleMember -Function @(
     'ConvertTo-LocalDate'
     'Find-M365User'
     'Get-M365UserAuthMethods'
+    'ConvertTo-M365AuthMethod'
     'Get-M365UserSignInPreferences'
     'Get-M365MfaAssessment'
+    'Get-M365RoleDefinitionNames'
     'Get-M365UserAdminRoles'
     'Remove-M365UserAuthMethod'
 )

@@ -13,6 +13,7 @@ With this tool, administrators and help desk staff set up **multi-factor authent
 - [Step-by-step guide](#step-by-step-guide)
 - [Which method when?](#which-method-when)
 - [Create a break-glass account](#create-a-break-glass-account)
+- [Tenant MFA report](#tenant-mfa-report)
 - [FAQ and troubleshooting](#faq-and-troubleshooting)
 - [Security](#security)
 - [For administrators: requirements and permissions](#for-administrators-requirements-and-permissions)
@@ -30,6 +31,7 @@ With this tool, administrators and help desk staff set up **multi-factor authent
 | 👑 | **Admin roles** – shows whether the user has administrative rights |
 | 📋 | **View and delete MFA methods** – all registered methods with date and details |
 | ➕ | **Set up methods** – FIDO2 key, TOTP cards, Temporary Access Pass and fake MFA |
+| 📊 | **Tenant MFA report** – MFA status of all users as a traffic light, with search, filters and colored Excel export |
 | 🆘 | **Break-glass account** – create an emergency access account with a FIDO2 key and an unknown password |
 | 🌐 | **Multilingual** – English (default), German, Spanish, French, Italian, Portuguese, Dutch and Polish |
 
@@ -147,6 +149,26 @@ If FIDO2 registration fails or is cancelled, the account stays protected with fa
 
 ---
 
+## Tenant MFA report
+
+Click **"MFA report …"** in the top left to check the MFA status of **all users of the tenant** (or of the members of a group, incl. nested groups) at once.
+
+1. Choose the scope: **All users** or **Members of a group** (find the group by the beginning of its name or by object ID). By default, only enabled accounts and no guest accounts are included.
+2. Click **"Create report"**. The list fills up while the methods are being read (20 users per Graph request). **"Cancel"** stops after the current block.
+3. The tiles show the number per traffic light color – **clicking a tile filters** the list. In addition, you can **search** (name, UPN, email, roles, methods, rating, department) and show **administrators only**.
+4. **"Excel export …"** saves the entries currently shown as an `.xlsx` file in traffic light colors, including a summary sheet. Neither Excel nor an extra module is required.
+5. **Double-clicking** a user closes the report and opens the user in the main window for editing. The report is kept until you sign out.
+
+| Traffic light | Meaning |
+|---|---|
+| 🔴 **Red** | No MFA (password only), **or** administrative role with insecure MFA only (SMS/call, TAP or fake MFA) |
+| 🟡 **Yellow** | Insecure MFA only (SMS/call, TAP or fake MFA), **or** administrator without phishing-resistant MFA (FIDO2, passkey, Windows Hello) |
+| 🟢 **Green** | Strong MFA – for administrators phishing-resistant |
+
+Administrative roles include active and PIM-eligible roles (marked "(PIM)") as well as roles assigned via groups.
+
+---
+
 ## FAQ and troubleshooting
 
 **Double-clicking `Start.cmd` does nothing or shows an error.**
@@ -219,6 +241,12 @@ Additionally for the first break-glass account:
 | `Domain.Read.All` | Show domains for selection |
 | `RoleManagement.ReadWrite.Directory` | Assign Global Administrator |
 
+Additionally for the tenant MFA report:
+
+| Permission | Purpose |
+|---|---|
+| `GroupMember.Read.All` | Select a group as scope, resolve admin roles assigned via groups |
+
 ### Required Entra roles for your own account
 
 | Task | Role |
@@ -252,8 +280,10 @@ In the **authentication methods policy** (Entra admin center → Protection → 
 | `Start-M365MfaTool.ps1` | User interface, state management and events |
 | `UI/MainWindow.xaml` | Main window layout |
 | `UI/BreakGlassDialog.xaml` | Dialog for new break-glass accounts |
+| `UI/TenantReportWindow.xaml` | Window of the tenant MFA report |
 | `Modules/Graph.psm1` | Sign-in, Graph requests, users, domains, roles, MFA traffic light, reading/deleting methods |
 | `Modules/Provisioning.psm1` | Setup of FIDO2, TOTP cards, fake MFA, TAP and break-glass accounts |
+| `Modules/TenantReport.psm1` | Tenant MFA report: users, roles, batched method queries, traffic light rating, Excel export |
 | `Modules/Localization.psm1` | Localization: loads the language files and provides the texts |
 | `Languages/*.json` | Texts per language (`en.json` is the reference) |
 | `Install-Prerequisites.ps1` | Optional advance installation of all modules |
