@@ -316,8 +316,9 @@ function Wait-Ui {
 
 function Update-UiNow {
     # Draws pending changes (texts, log) before a call that blocks the UI thread, e.g. the sign-in.
-    # Invoke with a low priority returns only after all higher priorities, including Render, are done.
-    $window.Dispatcher.Invoke([action]{ }, [System.Windows.Threading.DispatcherPriority]::Background)
+    # Processing the queue once is not enough inside a click handler: WPF only presents the new frame
+    # after the render thread has confirmed the previous one. Therefore keep processing messages briefly.
+    Wait-Ui 300
 }
 
 function ConvertTo-BitmapImage {
