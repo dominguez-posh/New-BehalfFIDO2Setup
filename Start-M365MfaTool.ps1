@@ -314,6 +314,12 @@ function Wait-Ui {
     }
 }
 
+function Update-UiNow {
+    # Draws pending changes (texts, log) before a call that blocks the UI thread, e.g. the sign-in.
+    # Invoke with a low priority returns only after all higher priorities, including Render, are done.
+    $window.Dispatcher.Invoke([action]{ }, [System.Windows.Threading.DispatcherPriority]::Background)
+}
+
 function ConvertTo-BitmapImage {
     param([Parameter(Mandatory)][byte[]]$Bytes)
     $stream = New-Object System.IO.MemoryStream (, $Bytes)
@@ -619,6 +625,7 @@ $BtnLogin.Add_Click({
         $TxtConnectionStatus.Text = T 'Header.SigningIn'
         $TxtConnectionStatus.Foreground = '#FCD34D'
         Write-UiLog (T 'Log.SigningIn')
+        Update-UiNow
         $context = Connect-M365Graph
         Set-ConnectionStatus $context
         Write-UiLog (T 'Log.SignedIn' $context.Account) 'Success'
@@ -952,6 +959,7 @@ $BtnBreakGlass.Add_Click({
     try {
         Set-Busy $true
         Write-UiLog (T 'Log.BreakGlassScopes')
+        Update-UiNow
         Set-ConnectionStatus (Request-M365GraphScopes -Scopes $script:BreakGlassScopes)
         $domains = @(Get-M365VerifiedDomains)
         if (-not $domains.Count) { throw (T 'BG.NoDomains') }
@@ -1132,6 +1140,7 @@ function Request-ReportScopes {
         but a group scope requires it.
     #>
     param([bool]$GroupRequired)
+    Update-UiNow
     try {
         Set-ConnectionStatus (Request-M365GraphScopes -Scopes (Get-M365ReportScopes))
     }
