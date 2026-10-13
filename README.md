@@ -31,7 +31,7 @@ With this tool, administrators and help desk staff set up **multi-factor authent
 | 👑 | **Admin roles** – shows whether the user has administrative rights |
 | 📋 | **View and delete MFA methods** – all registered methods with date and details |
 | ➕ | **Set up methods** – FIDO2 key, TOTP cards, Temporary Access Pass and fake MFA |
-| 📊 | **Tenant MFA report** – MFA status of all users as a traffic light, with search, filters and colored Excel export |
+| 📊 | **Tenant MFA report** – MFA status and last sign-in of all users as a traffic light, with search, filters and colored Excel export |
 | 🆘 | **Break-glass account** – create an emergency access account with a FIDO2 key and an unknown password |
 | 🌐 | **Multilingual** – English (default), German, Spanish, French, Italian, Portuguese, Dutch and Polish |
 
@@ -156,6 +156,7 @@ Click **"MFA report …"** in the top left to check the MFA status of **all user
 1. Choose the scope: **All users** or **Members of a group** (find the group by the beginning of its name or by object ID). By default, only enabled accounts and no guest accounts are included.
 2. Click **"Create report"**. The list fills up while the methods are being read (20 users per Graph request). **"Cancel"** stops after the current block.
 3. The tiles show the number per traffic light color – **clicking a tile filters** the list. In addition, you can **search** (name, UPN, email, roles, methods, rating, department) and show **administrators only**.
+   The columns **Last sign-in** and **Days since** show whether an account is actually used. Accounts without a sign-in for more than 90 days or that never signed in are highlighted in red, counted in a separate tile and can be shown with **Inactive only**.
 4. **"Excel export …"** saves the entries currently shown as an `.xlsx` file in traffic light colors, including a summary sheet. Neither Excel nor an extra module is required.
 5. **Double-clicking** a user closes the report and opens the user in the main window for editing. The report is kept until you sign out.
 
@@ -246,6 +247,9 @@ Additionally for the tenant MFA report:
 | Permission | Purpose |
 |---|---|
 | `GroupMember.Read.All` | Select a group as scope, resolve admin roles assigned via groups |
+| `AuditLog.Read.All` | Last sign-in (optional – without it, the report is created without this column) |
+
+The last sign-in additionally requires an **Entra ID P1/P2** license and a role that may read sign-in data, e.g. **Reports Reader**, **Security Reader** or **Global Reader**. It shows the last successful sign-in (interactive or non-interactive); Microsoft records this since December 2023, older values are the last sign-in attempt.
 
 ### Required Entra roles for your own account
 
@@ -284,6 +288,7 @@ In the **authentication methods policy** (Entra admin center → Protection → 
 | `Modules/Graph.psm1` | Sign-in, Graph requests, users, domains, roles, MFA traffic light, reading/deleting methods |
 | `Modules/Provisioning.psm1` | Setup of FIDO2, TOTP cards, fake MFA, TAP and break-glass accounts |
 | `Modules/TenantReport.psm1` | Tenant MFA report: users, roles, batched method queries, traffic light rating, Excel export |
+| `Modules/Xlsx.psm1` | Minimal Excel writer (.xlsx without Excel or additional modules) |
 | `Modules/Localization.psm1` | Localization: loads the language files and provides the texts |
 | `Languages/*.json` | Texts per language (`en.json` is the reference) |
 | `Install-Prerequisites.ps1` | Optional advance installation of all modules |

@@ -222,7 +222,7 @@
 
             <!-- Traffic light tiles = level filter -->
             <WrapPanel Grid.Row="1" Margin="0,0,0,12">
-                <RadioButton Name="RbRptAll" Uid="Report.Filter.All" Style="{StaticResource Tile}" IsChecked="True">
+                <RadioButton Name="RbRptAll" Style="{StaticResource Tile}" IsChecked="True">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="10" Height="10" Fill="#64748B" VerticalAlignment="Center"/>
@@ -264,6 +264,13 @@
                         <TextBlock Name="TxtRptCountAdminsRed" Style="{StaticResource TileCount}" Foreground="#991B1B"/>
                     </StackPanel>
                 </Border>
+                <Border Background="White" BorderBrush="#E1E5EA" BorderThickness="2" CornerRadius="6" Padding="14,8" MinWidth="170" Margin="10,0,0,0"
+                        Uid="Report.Tile.InactiveBox">
+                    <StackPanel>
+                        <TextBlock Name="TxtRptInactiveLabel" Text="-" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource MutedText}"/>
+                        <TextBlock Name="TxtRptCountInactive" Style="{StaticResource TileCount}" Foreground="#334155"/>
+                    </StackPanel>
+                </Border>
             </WrapPanel>
 
             <!-- Search, filters and export -->
@@ -278,7 +285,10 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Uid="Report.Search" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,8,0"/>
                 <TextBox Grid.Column="1" Name="TxtRptSearch" Uid="Report.SearchBox" Margin="4"/>
-                <CheckBox Grid.Column="2" Name="ChkRptAdminsOnly" Uid="Report.AdminsOnly"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <CheckBox Name="ChkRptAdminsOnly" Uid="Report.AdminsOnly"/>
+                    <CheckBox Name="ChkRptInactiveOnly" Uid="Report.InactiveOnlyBox"/>
+                </StackPanel>
                 <TextBlock Grid.Column="3" Uid="Report.DoubleClickHint" Style="{StaticResource Label}" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis" Margin="16,0,10,0"/>
                 <TextBlock Grid.Column="4" Name="TxtRptVisible" Text="" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,10,0"/>
@@ -300,6 +310,19 @@
                     <DataGridTextColumn Header="Report.Col.Reason" Binding="{Binding Reason}" Width="300" ElementStyle="{StaticResource CellText}"/>
                     <DataGridTextColumn Header="Report.Col.Name" Binding="{Binding DisplayName}" Width="190" ElementStyle="{StaticResource CellText}"/>
                     <DataGridTextColumn Header="Report.Col.Upn" Binding="{Binding UserPrincipalName}" Width="240" ElementStyle="{StaticResource CellText}"/>
+                    <DataGridTextColumn Header="Report.Col.LastSignIn" Binding="{Binding LastSignInText}" SortMemberPath="LastSignIn" Width="130" ElementStyle="{StaticResource CellText}"/>
+                    <DataGridTextColumn Header="Report.Col.DaysSinceSignIn" Binding="{Binding DaysText}" SortMemberPath="DaysSort" Width="80">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsInactive}" Value="True">
+                                        <Setter Property="Foreground" Value="#991B1B"/>
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
                     <DataGridTextColumn Header="Report.Col.Roles" Binding="{Binding AdminRoles}" Width="220" ElementStyle="{StaticResource CellText}"/>
                     <DataGridTextColumn Header="Report.Col.Methods" Binding="{Binding Methods}" Width="260" ElementStyle="{StaticResource CellText}"/>
                     <DataGridTextColumn Header="Report.Col.MethodCount" Binding="{Binding MethodCount}" Width="70"/>

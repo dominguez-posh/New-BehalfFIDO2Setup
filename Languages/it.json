@@ -384,6 +384,18 @@
     "Report.Summary.Total": "Totale",
     "Report.Summary.Admins": "Utenti con ruoli amministrativi",
     "Report.Summary.AdminsRed": "di cui in rosso",
+    "Report.Col.LastSignIn": "Ultimo accesso",
+    "Report.Col.DaysSinceSignIn": "Giorni da",
+    "Report.Never": "Mai",
+    "Report.InactiveOnly": "Solo inattivi (> {0} giorni o mai)",
+    "Report.InactiveOnlyBox.ToolTip": "Mostra solo gli account senza accesso nel periodo indicato o che non hanno mai effettuato l'accesso",
+    "Report.Tile.Inactive": "Inattivi (> {0} giorni o mai)",
+    "Report.Tile.InactiveBox.ToolTip": "Account senza accesso riuscito in questo periodo. \"-\" = dati di accesso non disponibili.",
+    "Report.SignInUnavailable": "Impossibile leggere l'ultimo accesso (richiede Entra ID P1/P2 e ad es. il ruolo Lettore report): {0}",
+    "Report.SignInNoPermission": "Autorizzazione AuditLog.Read.All non concessa – il report viene creato senza ultimo accesso.",
+    "Report.Summary.Inactive": "Account inattivi (> {0} giorni o mai acceduti)",
+    "Report.Summary.InactiveAdmins": "di cui con ruoli amministrativi",
+    "Report.Summary.SignInNotAvailable": "non disponibile (licenza o autorizzazione mancante)",
     "Log.ReportStarted": "Report MFA avviato ({0}).",
     "Log.ReportFinished": "Report MFA completato: {0} utenti – rosso {1}, giallo {2}, verde {3}."
 }

@@ -5,17 +5,22 @@
 .DESCRIPTION
     Loads all users (or the members of a group incl. nested groups), their administrative roles
     and authentication methods, rates every user as a traffic light and exports the result as a
-    colored Excel workbook (.xlsx, written directly - neither Excel nor an extra module required).
+    colored Excel workbook (via Xlsx.psm1 - neither Excel nor an extra module required).
     Authentication methods are read via Graph JSON batching (20 users per request).
 #>
 
 Set-StrictMode -Version Latest
 
+# Generic .xlsx writer, only needed by this module
+Import-Module (Join-Path $PSScriptRoot 'Xlsx.psm1') -Force
+
 $script:ReportScopes = @(
     'GroupMember.Read.All'   # Group selection and administrative roles assigned via groups
+    'AuditLog.Read.All'      # Last sign-in (signInActivity, requires Entra ID P1/P2)
 )
 
 $script:BatchSize = 20
+$script:InactiveDays = 90   # No sign-in for longer than this (or never) = inactive
 $script:UserSelect = 'id,displayName,userPrincipalName,mail,accountEnabled,userType,jobTitle,department,assignedLicenses'
 $script:LevelOrder = @{ Red = 0; Yellow = 1; Green = 2; Unknown = 3 }
 
@@ -33,6 +38,28 @@ function Get-GraphPages {
 
 function Get-M365ReportScopes {
     $script:ReportScopes
+}
+
+function Get-M365ReportInactiveDays {
+    $script:InactiveDays
+}
+
+function ConvertTo-LastSignIn {
+    <#
+    .SYNOPSIS
+        Returns the last sign-in (local time) from a Graph signInActivity object, $null if never.
+    .DESCRIPTION
+        Prefers the last successful sign-in (interactive or non-interactive). Graph only records it
+        since December 2023, so older accounts fall back to the latest sign-in attempt.
+    #>
+    param($Activity)
+    if ($Activity -isnot [System.Collections.IDictionary]) { return $null }
+    $successful = ConvertTo-LocalDate $Activity['lastSuccessfulSignInDateTime']
+    if ($successful) { return $successful }
+    @(
+        ConvertTo-LocalDate $Activity['lastSignInDateTime']
+        ConvertTo-LocalDate $Activity['lastNonInteractiveSignInDateTime']
+    ) | Where-Object { $_ } | Sort-Object -Descending | Select-Object -First 1
 }
 
 function Get-M365OrganizationName {
@@ -81,19 +108,38 @@ function Get-M365ReportUsers {
     <#
     .SYNOPSIS
         Returns all users of the tenant or the (transitive) user members of a group.
+    .DESCRIPTION
+        With IncludeSignIn, all users are loaded including their last sign-in. If that is not possible
+        (no Entra ID P1/P2 license or missing permission), OnWarning is called and the users are
+        loaded without it. Group members never include it (Graph only returns it on /users),
+        it is read per user in Invoke-M365TenantMfaReport instead.
     #>
-    param([string]$GroupId)
+    param(
+        [string]$GroupId,
+        [switch]$IncludeSignIn,
+        [scriptblock]$OnWarning = { param($Message) }
+    )
 
+    $signInKnown = $false
     if ($GroupId) {
         $uri = "v1.0/groups/$([uri]::EscapeDataString($GroupId))/transitiveMembers/microsoft.graph.user?`$select=$script:UserSelect&`$top=999&`$count=true"
-        $headers = @{ ConsistencyLevel = 'eventual' }
+        $items = @(Get-GraphPages -Uri $uri -Headers @{ ConsistencyLevel = 'eventual' })
     }
     else {
-        $uri = "v1.0/users?`$select=$script:UserSelect&`$top=999"
-        $headers = @{}
+        $items = $null
+        if ($IncludeSignIn) {
+            try {
+                $items = @(Get-GraphPages -Uri "v1.0/users?`$select=$script:UserSelect,signInActivity&`$top=999")
+                $signInKnown = $true
+            }
+            catch {
+                & $OnWarning (T 'Report.SignInUnavailable' $_.Exception.Message)
+            }
+        }
+        if ($null -eq $items) { $items = @(Get-GraphPages -Uri "v1.0/users?`$select=$script:UserSelect&`$top=999") }
     }
 
-    Get-GraphPages -Uri $uri -Headers $headers | ForEach-Object {
+    $items | ForEach-Object {
         [pscustomobject]@{
             Id                = [string]$_['id']
             DisplayName       = [string]$_['displayName']
@@ -104,6 +150,8 @@ function Get-M365ReportUsers {
             JobTitle          = [string]$_['jobTitle']
             Department        = [string]$_['department']
             IsLicensed        = @($_['assignedLicenses'] | Where-Object { $null -ne $_ }).Count -gt 0
+            SignInKnown       = $signInKnown
+            LastSignIn        = if ($signInKnown) { ConvertTo-LastSignIn $_['signInActivity'] } else { $null }
         }
     }
 }
@@ -178,15 +226,18 @@ function Get-M365TenantAdminRoles {
     $roles
 }
 
-function Get-M365AuthMethodsBatch {
+function Invoke-M365UserBatch {
     <#
     .SYNOPSIS
-        Reads the authentication methods of up to 20 users with one Graph batch request.
+        Runs one GET per user (up to 20) as a Graph batch request, with retries when throttled.
+    .PARAMETER Path
+        Request path with {0} as placeholder for the user ID, e.g. '/users/{0}/authentication/methods'.
     .OUTPUTS
-        Hashtable user ID -> @{ Items = raw methods; Error = message or $null }
+        Hashtable user ID -> @{ Body = response body; Error = message or $null }
     #>
     param(
         [Parameter(Mandatory)][string[]]$UserIds,
+        [Parameter(Mandatory)][string]$Path,
         [scriptblock]$Wait = { param($Milliseconds) Start-Sleep -Milliseconds $Milliseconds }
     )
 
@@ -194,7 +245,7 @@ function Get-M365AuthMethodsBatch {
     $pending = @($UserIds)
     for ($attempt = 1; $pending.Count -and $attempt -le 6; $attempt++) {
         $requests = for ($i = 0; $i -lt $pending.Count; $i++) {
-            @{ id = "$i"; method = 'GET'; url = "/users/$($pending[$i])/authentication/methods" }
+            @{ id = "$i"; method = 'GET'; url = $Path -f $pending[$i] }
         }
         $response = Invoke-M365GraphRequest -Method POST -Uri 'beta/$batch' -Body @{ requests = @($requests) }
 
@@ -219,19 +270,63 @@ function Get-M365AuthMethodsBatch {
                 if ($body -is [System.Collections.IDictionary] -and $body['error'] -is [System.Collections.IDictionary]) {
                     $message = '{0}: {1}' -f $body['error']['code'], $body['error']['message']
                 }
-                $result[$userId] = @{ Items = @(); Error = $message }
+                $result[$userId] = @{ Body = $null; Error = $message }
                 continue
             }
-
-            $items = @($body['value'] | Where-Object { $null -ne $_ })
-            if ($body['@odata.nextLink']) { $items += @(Get-GraphPages -Uri $body['@odata.nextLink']) }
-            $result[$userId] = @{ Items = $items; Error = $null }
+            $result[$userId] = @{ Body = $body; Error = $null }
         }
 
         $pending = @($retry)
         if ($pending.Count) { & $Wait ($retryAfter * 1000) }
     }
-    foreach ($userId in $pending) { $result[$userId] = @{ Items = @(); Error = T 'Report.Throttled' } }
+    foreach ($userId in $pending) { $result[$userId] = @{ Body = $null; Error = T 'Report.Throttled' } }
+    $result
+}
+
+function Get-M365AuthMethodsBatch {
+    <#
+    .SYNOPSIS
+        Reads the authentication methods of up to 20 users with one Graph batch request.
+    .OUTPUTS
+        Hashtable user ID -> @{ Items = raw methods; Error = message or $null }
+    #>
+    param(
+        [Parameter(Mandatory)][string[]]$UserIds,
+        [scriptblock]$Wait = { param($Milliseconds) Start-Sleep -Milliseconds $Milliseconds }
+    )
+
+    $result = @{}
+    $responses = Invoke-M365UserBatch -UserIds $UserIds -Path '/users/{0}/authentication/methods' -Wait $Wait
+    foreach ($userId in $responses.Keys) {
+        $response = $responses[$userId]
+        if ($response.Error) { $result[$userId] = @{ Items = @(); Error = $response.Error }; continue }
+        $body = $response.Body
+        $items = @($body['value'] | Where-Object { $null -ne $_ })
+        if ($body['@odata.nextLink']) { $items += @(Get-GraphPages -Uri $body['@odata.nextLink']) }
+        $result[$userId] = @{ Items = $items; Error = $null }
+    }
+    $result
+}
+
+function Get-M365SignInBatch {
+    <#
+    .SYNOPSIS
+        Reads the last sign-in of up to 20 users with one Graph batch request.
+    .OUTPUTS
+        Hashtable user ID -> @{ LastSignIn = date or $null (never); Error = message or $null }
+    #>
+    param(
+        [Parameter(Mandatory)][string[]]$UserIds,
+        [scriptblock]$Wait = { param($Milliseconds) Start-Sleep -Milliseconds $Milliseconds }
+    )
+
+    $result = @{}
+    $responses = Invoke-M365UserBatch -UserIds $UserIds -Path '/users/{0}?$select=id,signInActivity' -Wait $Wait
+    foreach ($userId in $responses.Keys) {
+        $response = $responses[$userId]
+        $result[$userId] = if ($response.Error) { @{ LastSignIn = $null; Error = $response.Error } }
+                           else { @{ LastSignIn = ConvertTo-LastSignIn $response.Body['signInActivity']; Error = $null } }
+    }
     $result
 }
 
@@ -298,6 +393,11 @@ function New-M365ReportRow {
     $password = @($methods | Where-Object Type -eq '#microsoft.graph.passwordAuthenticationMethod') | Select-Object -First 1
     $mfa = @($methods | Where-Object Type -ne '#microsoft.graph.passwordAuthenticationMethod')
 
+    # Last sign-in: SignInKnown = $false means not available (license/permission), LastSignIn = $null means never
+    $signInKnown = [bool]($User.PSObject.Properties['SignInKnown'] -and $User.SignInKnown)
+    $lastSignIn = if ($signInKnown) { $User.LastSignIn } else { $null }
+    $days = if ($lastSignIn) { [int][Math]::Floor(((Get-Date) - $lastSignIn).TotalDays) } else { $null }
+
     [pscustomobject]@{
         Level             = $rating.Level
         LevelOrder        = $script:LevelOrder[$rating.Level]
@@ -316,6 +416,14 @@ function New-M365ReportRow {
         JobTitle          = $User.JobTitle
         Department        = $User.Department
         PasswordLastSet   = if ($password) { $password.Created } else { $null }
+        SignInKnown       = $signInKnown
+        LastSignIn        = $lastSignIn
+        LastSignInText    = if ($lastSignIn) { $lastSignIn.ToString((T 'Format.DateTime')) } elseif ($signInKnown) { T 'Report.Never' } else { '' }
+        LastSignInExport  = if ($lastSignIn) { $lastSignIn } elseif ($signInKnown) { T 'Report.Never' } else { $null }
+        DaysSinceSignIn   = $days
+        DaysText          = if ($null -ne $days) { "$days" } elseif ($signInKnown) { T 'Report.Never' } else { '' }
+        DaysSort          = if ($null -ne $days) { $days } elseif ($signInKnown) { [int]::MaxValue } else { -1 }
+        IsInactive        = $signInKnown -and ($null -eq $days -or $days -gt $script:InactiveDays)
         Id                = $User.Id
     }
 }
@@ -334,13 +442,17 @@ function Invoke-M365TenantMfaReport {
         Called after each batch with the new rows, the number of processed and of all users.
     .PARAMETER ShouldCancel
         Returns $true to stop after the current batch.
+    .PARAMETER IncludeSignIn
+        Also read the last sign-in (requires AuditLog.Read.All and Entra ID P1/P2).
     .OUTPUTS
-        Number of all and of processed users, and whether the report was cancelled.
+        Number of all and of processed users, whether the report was cancelled and whether
+        the last sign-in is available.
     #>
     param(
         [string]$GroupId,
         [switch]$IncludeDisabled,
         [switch]$IncludeGuests,
+        [switch]$IncludeSignIn,
         [scriptblock]$OnProgress = { param($Message) },
         [scriptblock]$OnWarning = { param($Message) },
         [scriptblock]$OnRows = { param($Rows, $Done, $Total) },
@@ -349,9 +461,12 @@ function Invoke-M365TenantMfaReport {
     )
 
     & $OnProgress (T 'Report.Progress.Users')
-    $users = @(Get-M365ReportUsers -GroupId $GroupId |
+    $users = @(Get-M365ReportUsers -GroupId $GroupId -IncludeSignIn:$IncludeSignIn -OnWarning $OnWarning |
         Where-Object { ($IncludeDisabled -or $_.AccountEnabled) -and ($IncludeGuests -or $_.UserType -ne 'Guest') } |
         Sort-Object Id -Unique)
+    # Group members come without sign-in data: read it per batch below.
+    $readSignIn = $IncludeSignIn -and [bool]$GroupId
+    $signInAvailable = @($users | Where-Object SignInKnown).Count -gt 0
 
     & $OnProgress (T 'Report.Progress.Roles')
     $adminRoles = Get-M365TenantAdminRoles -OnWarning $OnWarning
@@ -363,7 +478,25 @@ function Invoke-M365TenantMfaReport {
         & $OnProgress (T 'Report.Progress.Methods' $done $users.Count)
 
         $chunk = @($users[$offset..([Math]::Min($offset + $script:BatchSize, $users.Count) - 1)])
-        $methods = Get-M365AuthMethodsBatch -UserIds @($chunk | ForEach-Object { $_.Id }) -Wait $Wait
+        $userIds = @($chunk | ForEach-Object { $_.Id })
+        if ($readSignIn) {
+            $signIns = Get-M365SignInBatch -UserIds $userIds -Wait $Wait
+            $failed = @($userIds | Where-Object { $signIns[$_].Error })
+            if ($failed.Count -eq $userIds.Count) {
+                # Fails for all users (no license or permission): do not try again for every batch.
+                $readSignIn = $false
+                & $OnWarning (T 'Report.SignInUnavailable' $signIns[$failed[0]].Error)
+            }
+            else {
+                foreach ($user in $chunk) {
+                    if ($signIns[$user.Id].Error) { continue }
+                    $user.SignInKnown = $true
+                    $user.LastSignIn = $signIns[$user.Id].LastSignIn
+                    $signInAvailable = $true
+                }
+            }
+        }
+        $methods = Get-M365AuthMethodsBatch -UserIds $userIds -Wait $Wait
         $rows = foreach ($user in $chunk) {
             $roles = if ($adminRoles.ContainsKey($user.Id)) { @($adminRoles[$user.Id]) } else { @() }
             New-M365ReportRow -User $user -Roles $roles -MethodResult $methods[$user.Id]
@@ -372,228 +505,12 @@ function Invoke-M365TenantMfaReport {
         & $OnRows @($rows) $done $users.Count
     }
 
-    [pscustomobject]@{ Total = $users.Count; Done = $done; Cancelled = $cancelled }
+    [pscustomobject]@{ Total = $users.Count; Done = $done; Cancelled = $cancelled; SignInAvailable = $signInAvailable }
 }
 
 #endregion
 
 #region Excel export
-
-# Cell styles (index into cellXfs): text style, date style
-$script:XlsxStyles = @{
-    Default = 0, 10
-    Header  = 1, 1
-    Red     = 2, 3
-    Yellow  = 4, 5
-    Green   = 6, 7
-    Unknown = 8, 9
-    Bold    = 11, 11
-}
-
-function ConvertTo-XlsxColumnName {
-    param([int]$Index)   # 1-based
-    $name = ''
-    while ($Index -gt 0) {
-        $name = [char](65 + (($Index - 1) % 26)) + $name
-        $Index = [int][Math]::Floor(($Index - 1) / 26)
-    }
-    $name
-}
-
-function ConvertTo-XmlText {
-    param([string]$Text)
-    # Control characters are not allowed in XML
-    [System.Security.SecurityElement]::Escape(($Text -replace '[\x00-\x08\x0B\x0C\x0E-\x1F]', ''))
-}
-
-function New-XlsxSheetXml {
-    <#
-    .SYNOPSIS
-        Builds a worksheet. Rows are @{ Values = object[]; Style = key of XlsxStyles }.
-    #>
-    param(
-        [double[]]$Widths = @(),
-        [object[]]$Rows = @(),
-        [switch]$HeaderRow
-    )
-
-    $invariant = [Globalization.CultureInfo]::InvariantCulture
-    $xml = New-Object System.Text.StringBuilder
-    [void]$xml.Append('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>')
-    [void]$xml.Append('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">')
-    if ($HeaderRow) {
-        [void]$xml.Append('<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>')
-    }
-    if ($Widths.Count) {
-        [void]$xml.Append('<cols>')
-        for ($i = 0; $i -lt $Widths.Count; $i++) {
-            [void]$xml.AppendFormat($invariant, '<col min="{0}" max="{0}" width="{1}" customWidth="1"/>', ($i + 1), $Widths[$i])
-        }
-        [void]$xml.Append('</cols>')
-    }
-
-    [void]$xml.Append('<sheetData>')
-    $maxColumns = 1
-    $letters = @{}
-    for ($r = 0; $r -lt $Rows.Count; $r++) {
-        $rowNumber = $r + 1
-        $styleKey = if ($Rows[$r]['Style']) { $Rows[$r]['Style'] } else { 'Default' }
-        $textStyle, $dateStyle = $script:XlsxStyles[$styleKey]
-        $values = @($Rows[$r].Values)
-        $maxColumns = [Math]::Max($maxColumns, $values.Count)
-
-        [void]$xml.Append("<row r=`"$rowNumber`">")
-        for ($c = 0; $c -lt $values.Count; $c++) {
-            if (-not $letters.ContainsKey($c)) { $letters[$c] = ConvertTo-XlsxColumnName ($c + 1) }
-            $ref = $letters[$c] + $rowNumber
-            $value = $values[$c]
-            if ($null -eq $value -or "$value" -eq '') {
-                [void]$xml.Append("<c r=`"$ref`" s=`"$textStyle`"/>")
-            }
-            elseif ($value -is [datetime]) {
-                [void]$xml.Append("<c r=`"$ref`" s=`"$dateStyle`"><v>$($value.ToOADate().ToString($invariant))</v></c>")
-            }
-            elseif ($value -is [int] -or $value -is [long] -or $value -is [double]) {
-                [void]$xml.Append("<c r=`"$ref`" s=`"$textStyle`"><v>$(([double]$value).ToString($invariant))</v></c>")
-            }
-            else {
-                [void]$xml.Append("<c r=`"$ref`" s=`"$textStyle`" t=`"inlineStr`"><is><t xml:space=`"preserve`">$(ConvertTo-XmlText "$value")</t></is></c>")
-            }
-        }
-        [void]$xml.Append('</row>')
-    }
-    [void]$xml.Append('</sheetData>')
-
-    if ($HeaderRow -and $Rows.Count) {
-        [void]$xml.Append("<autoFilter ref=`"A1:$(ConvertTo-XlsxColumnName $maxColumns)$($Rows.Count)`"/>")
-    }
-    [void]$xml.Append('</worksheet>')
-    $xml.ToString()
-}
-
-function Get-XlsxStylesXml {
-    $font = '<font>{0}<sz val="11"/>{1}<name val="Calibri"/><family val="2"/></font>'
-    $fonts = @(
-        ($font -f '', '')
-        ($font -f '<b/>', '<color rgb="FFFFFFFF"/>')     # 1 header
-        ($font -f '', '<color rgb="FF9C0006"/>')         # 2 red
-        ($font -f '', '<color rgb="FF9C5700"/>')         # 3 yellow
-        ($font -f '', '<color rgb="FF006100"/>')         # 4 green
-        ($font -f '', '<color rgb="FF595959"/>')         # 5 unknown
-        ($font -f '<b/>', '')                            # 6 bold
-    )
-    $solid = '<fill><patternFill patternType="solid"><fgColor rgb="{0}"/><bgColor indexed="64"/></patternFill></fill>'
-    $fills = @(
-        '<fill><patternFill patternType="none"/></fill>'
-        '<fill><patternFill patternType="gray125"/></fill>'
-        ($solid -f 'FF0F172A')   # 2 header
-        ($solid -f 'FFFFC7CE')   # 3 red
-        ($solid -f 'FFFFEB9C')   # 4 yellow
-        ($solid -f 'FFC6EFCE')   # 5 green
-        ($solid -f 'FFEDEDED')   # 6 unknown
-    )
-    $side = '<{0} style="thin"><color rgb="FFD9D9D9"/></{0}>'
-    $borders = @(
-        '<border><left/><right/><top/><bottom/><diagonal/></border>'
-        '<border>' + (($('left', 'right', 'top', 'bottom') | ForEach-Object { $side -f $_ }) -join '') + '<diagonal/></border>'
-    )
-    # numFmtId 22 = date and time in the regional format of Excel
-    $xf = '<xf numFmtId="{0}" fontId="{1}" fillId="{2}" borderId="{3}" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/>'
-    $cellXfs = @(
-        ($xf -f 0, 0, 0, 0)    # 0 default
-        ($xf -f 0, 1, 2, 1)    # 1 header
-        ($xf -f 0, 2, 3, 1)    # 2 red
-        ($xf -f 22, 2, 3, 1)   # 3 red date
-        ($xf -f 0, 3, 4, 1)    # 4 yellow
-        ($xf -f 22, 3, 4, 1)   # 5 yellow date
-        ($xf -f 0, 4, 5, 1)    # 6 green
-        ($xf -f 22, 4, 5, 1)   # 7 green date
-        ($xf -f 0, 5, 6, 1)    # 8 unknown
-        ($xf -f 22, 5, 6, 1)   # 9 unknown date
-        ($xf -f 22, 0, 0, 0)   # 10 default date
-        ($xf -f 0, 6, 0, 0)    # 11 bold
-    )
-
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-    '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-    "<fonts count=`"$($fonts.Count)`">$($fonts -join '')</fonts>" +
-    "<fills count=`"$($fills.Count)`">$($fills -join '')</fills>" +
-    "<borders count=`"$($borders.Count)`">$($borders -join '')</borders>" +
-    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-    "<cellXfs count=`"$($cellXfs.Count)`">$($cellXfs -join '')</cellXfs>" +
-    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
-    '</styleSheet>'
-}
-
-function Save-XlsxWorkbook {
-    <#
-    .SYNOPSIS
-        Writes an .xlsx file. Sheets are @{ Name; Xml; FilterRef (optional, e.g. A1:P20) }.
-    #>
-    param(
-        [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)][object[]]$Sheets
-    )
-
-    Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
-
-    $sheetEntries = ''
-    $relations = ''
-    $overrides = ''
-    $definedNames = ''
-    for ($i = 0; $i -lt $Sheets.Count; $i++) {
-        $number = $i + 1
-        # Sheet names: max. 31 characters, without : \ / ? * [ ]
-        $name = ($Sheets[$i].Name -replace '[:\\/\?\*\[\]]', '-')
-        if ($name.Length -gt 31) { $name = $name.Substring(0, 31) }
-        $sheetEntries += "<sheet name=`"$(ConvertTo-XmlText $name)`" sheetId=`"$number`" r:id=`"rId$number`"/>"
-        $relations += "<Relationship Id=`"rId$number`" Type=`"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet`" Target=`"worksheets/sheet$number.xml`"/>"
-        $overrides += "<Override PartName=`"/xl/worksheets/sheet$number.xml`" ContentType=`"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml`"/>"
-        if ($Sheets[$i]['FilterRef']) {
-            $absolute = $Sheets[$i]['FilterRef'] -replace '([A-Z]+)(\d+)', '$$$1$$$2'
-            $definedNames += "<definedName name=`"_xlnm._FilterDatabase`" localSheetId=`"$i`" hidden=`"1`">'$(ConvertTo-XmlText ($name.Replace("'", "''")))'!$absolute</definedName>"
-        }
-    }
-    $stylesId = $Sheets.Count + 1
-
-    $parts = [ordered]@{
-        '[Content_Types].xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
-            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
-            '<Default Extension="xml" ContentType="application/xml"/>' +
-            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
-            '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
-            $overrides + '</Types>'
-        '_rels/.rels' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
-            '</Relationships>'
-        'xl/workbook.xml' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-            "<sheets>$sheetEntries</sheets>" +
-            $(if ($definedNames) { "<definedNames>$definedNames</definedNames>" } else { '' }) +
-            '</workbook>'
-        'xl/_rels/workbook.xml.rels' = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + $relations +
-            "<Relationship Id=`"rId$stylesId`" Type=`"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles`" Target=`"styles.xml`"/>" +
-            '</Relationships>'
-        'xl/styles.xml' = Get-XlsxStylesXml
-    }
-    for ($i = 0; $i -lt $Sheets.Count; $i++) { $parts["xl/worksheets/sheet$($i + 1).xml"] = $Sheets[$i].Xml }
-
-    if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Force -ErrorAction Stop }
-    $zip = [System.IO.Compression.ZipFile]::Open($Path, [System.IO.Compression.ZipArchiveMode]::Create)
-    try {
-        foreach ($part in $parts.GetEnumerator()) {
-            $entry = $zip.CreateEntry($part.Key, [System.IO.Compression.CompressionLevel]::Optimal)
-            $writer = New-Object System.IO.StreamWriter ($entry.Open(), (New-Object System.Text.UTF8Encoding $false))
-            try { $writer.Write($part.Value) } finally { $writer.Dispose() }
-        }
-    }
-    finally {
-        $zip.Dispose()
-    }
-}
 
 function Export-M365MfaReportXlsx {
     <#
@@ -614,6 +531,8 @@ function Export-M365MfaReportXlsx {
         @{ Key = 'Report.Col.Reason';          Width = 55; Property = 'Reason' }
         @{ Key = 'Report.Col.Name';            Width = 28; Property = 'DisplayName' }
         @{ Key = 'Report.Col.Upn';             Width = 38; Property = 'UserPrincipalName' }
+        @{ Key = 'Report.Col.LastSignIn';      Width = 18; Property = 'LastSignInExport' }
+        @{ Key = 'Report.Col.DaysSinceSignIn'; Width = 12; Property = 'DaysSinceSignIn' }
         @{ Key = 'Report.Col.Mail';            Width = 34; Property = 'Mail' }
         @{ Key = 'Report.Col.Admin';           Width = 9;  Property = 'IsAdmin' }
         @{ Key = 'Report.Col.Roles';           Width = 45; Property = 'AdminRoles' }
@@ -661,6 +580,16 @@ function Export-M365MfaReportXlsx {
     $admins = @($Rows | Where-Object IsAdmin)
     $summaryRows.Add(@{ Values = @((T 'Report.Summary.Admins'), $admins.Count) })
     $summaryRows.Add(@{ Style = 'Red'; Values = @((T 'Report.Summary.AdminsRed'), @($admins | Where-Object Level -eq 'Red').Count) })
+    if (@($Rows | Where-Object SignInKnown).Count) {
+        $inactive = @($Rows | Where-Object IsInactive)
+        $summaryRows.Add(@{ Values = @() })
+        $summaryRows.Add(@{ Values = @((T 'Report.Summary.Inactive' $script:InactiveDays), $inactive.Count) })
+        $summaryRows.Add(@{ Style = 'Red'; Values = @((T 'Report.Summary.InactiveAdmins'), @($inactive | Where-Object IsAdmin).Count) })
+    }
+    else {
+        $summaryRows.Add(@{ Values = @() })
+        $summaryRows.Add(@{ Values = @((T 'Report.Col.LastSignIn'), (T 'Report.Summary.SignInNotAvailable')) })
+    }
 
     Save-XlsxWorkbook -Path $Path -Sheets @(
         @{ Name = T 'Report.Sheet.List'; FilterRef = $filterRef
@@ -674,9 +603,9 @@ function Export-M365MfaReportXlsx {
 
 Export-ModuleMember -Function @(
     'Get-M365ReportScopes'
+    'Get-M365ReportInactiveDays'
     'Get-M365OrganizationName'
     'Find-M365Group'
     'Invoke-M365TenantMfaReport'
-    'Get-M365TenantMfaRating'
     'Export-M365MfaReportXlsx'
 )

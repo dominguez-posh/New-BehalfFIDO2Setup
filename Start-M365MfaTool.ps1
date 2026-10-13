@@ -1014,7 +1014,8 @@ function New-ReportData {
         TenantName = $null
         ScopeText  = ''
         Rows       = New-Object System.Collections.ObjectModel.ObservableCollection[object]
-        Counts     = @{ Red = 0; Yellow = 0; Green = 0; Unknown = 0; AdminsRed = 0 }
+        Counts     = @{ Red = 0; Yellow = 0; Green = 0; Unknown = 0; AdminsRed = 0; Inactive = 0 }
+        SignInAvailable = $false
     }
 }
 
@@ -1045,6 +1046,8 @@ function Update-ReportCounts {
     $r.TxtRptCountYellow.Text = "$($data.Counts.Yellow)"
     $r.TxtRptCountGreen.Text = "$($data.Counts.Green)"
     $r.TxtRptCountAdminsRed.Text = "$($data.Counts.AdminsRed)"
+    # '-' when the last sign-in is not available (license or permission missing)
+    $r.TxtRptCountInactive.Text = if ($data.SignInAvailable) { "$($data.Counts.Inactive)" } else { '-' }
     $r.TxtRptVisible.Text = if ($data.Rows.Count) { T 'Report.Status.Visible' $r.View.Count $data.Rows.Count } else { '' }
     $r.TxtRptEmpty.Visibility = if ($data.Rows.Count) { 'Collapsed' } else { 'Visible' }
 }
@@ -1053,6 +1056,7 @@ function Update-ReportFilter {
     $r = $script:Rpt
     $r.SearchText = $r.TxtRptSearch.Text.Trim()
     $r.AdminsOnly = [bool]$r.ChkRptAdminsOnly.IsChecked
+    $r.InactiveOnly = [bool]$r.ChkRptInactiveOnly.IsChecked
     $r.View.Refresh()
     Update-ReportCounts
 }
@@ -1063,6 +1067,7 @@ function Get-ReportFilterText {
     $parts = @(
         if ($r.LevelFilter) { T "Report.Tile.$($r.LevelFilter)" }
         if ($r.AdminsOnly) { T 'Report.AdminsOnly' }
+        if ($r.InactiveOnly) { T 'Report.InactiveOnly' (Get-M365ReportInactiveDays) }
         if ($r.SearchText) { T 'Report.Summary.SearchFor' $r.SearchText }
     )
     $parts -join '; '
@@ -1079,11 +1084,67 @@ function Add-ReportRows {
         $data.Rows.Add($row)
         $data.Counts[$row.Level]++
         if ($row.IsAdmin -and $row.Level -eq 'Red') { $data.Counts.AdminsRed++ }
+        if ($row.IsInactive) { $data.Counts.Inactive++ }
+        if ($row.SignInKnown) { $data.SignInAvailable = $true }
     }
     $script:Rpt.PrgRpt.IsIndeterminate = $false
     $script:Rpt.PrgRpt.Value = if ($Total) { 100 * $Done / $Total } else { 100 }
     Update-ReportCounts
     Set-ReportStatus (T 'Report.Progress.Methods' $Done $Total)
+}
+
+function Get-ReportTenantLabel {
+    # "Contoso (tenant ID)" or only the tenant ID if the name could not be read
+    $data = $script:ReportData
+    if ($data.TenantName) { '{0} ({1})' -f $data.TenantName, $data.TenantId } else { $data.TenantId }
+}
+
+function Connect-ReportView {
+    # Own view per window and collection: sorted red -> yellow -> green, filtered by tile, admins, inactivity and search.
+    $r = $script:Rpt
+    $view = [System.Windows.Data.ListCollectionView]::new($script:ReportData.Rows)
+    $view.SortDescriptions.Add((New-Object System.ComponentModel.SortDescription 'LevelOrder', 'Ascending'))
+    $view.SortDescriptions.Add((New-Object System.ComponentModel.SortDescription 'DisplayName', 'Ascending'))
+    $view.Filter = [Predicate[object]]{
+        param($row)
+        $state = $script:Rpt
+        if ($state.LevelFilter -and $row.Level -ne $state.LevelFilter) { return $false }
+        if ($state.AdminsOnly -and -not $row.IsAdmin) { return $false }
+        if ($state.InactiveOnly -and -not $row.IsInactive) { return $false }
+        if ($state.SearchText -and $row.SearchText.IndexOf($state.SearchText, [StringComparison]::OrdinalIgnoreCase) -lt 0) { return $false }
+        $true
+    }
+    $r.View = $view
+    $r.DgRpt.ItemsSource = $view
+    Update-ReportCounts
+}
+
+function Request-ReportScopes {
+    <#
+    .SYNOPSIS
+        Requests the additional report permissions. Returns $true if the last sign-in can be read.
+    .DESCRIPTION
+        AuditLog.Read.All (last sign-in) is optional: if the consent fails, it is requested again
+        without it. Without GroupMember.Read.All only roles assigned via groups are missing,
+        but a group scope requires it.
+    #>
+    param([bool]$GroupRequired)
+    try {
+        Set-ConnectionStatus (Request-M365GraphScopes -Scopes (Get-M365ReportScopes))
+    }
+    catch {
+        Write-UiLog $_.Exception.Message 'Warning'
+        try {
+            Set-ConnectionStatus (Request-M365GraphScopes -Scopes @(Get-M365ReportScopes | Where-Object { $_ -ne 'AuditLog.Read.All' }))
+        }
+        catch {
+            if ($GroupRequired) { throw }
+            Write-UiLog $_.Exception.Message 'Warning'
+        }
+    }
+    $canReadSignIn = @($script:Context.Scopes) -contains 'AuditLog.Read.All'
+    if (-not $canReadSignIn) { Write-UiLog (T 'Report.SignInNoPermission') 'Warning' }
+    $canReadSignIn
 }
 
 function Start-TenantReport {
@@ -1116,20 +1177,13 @@ function Start-TenantReport {
 
     try {
         Set-ReportBusy $true
-        try {
-            Set-ConnectionStatus (Request-M365GraphScopes -Scopes (Get-M365ReportScopes))
-        }
-        catch {
-            # Without group permissions, only roles assigned via groups are missing; a group scope needs them.
-            if ($groupId) { throw }
-            Write-UiLog $_.Exception.Message 'Warning'
-        }
+        $includeSignIn = Request-ReportScopes -GroupRequired ([bool]$groupId)
         $script:ReportData.TenantId = $script:Context.TenantId
         $script:ReportData.TenantName = Get-M365OrganizationName
-        Set-ReportTenantText
+        $r.TxtRptTenant.Text = T 'Header.Tenant' (Get-ReportTenantLabel)
         Write-UiLog (T 'Log.ReportStarted' $scopeText)
 
-        $result = Invoke-M365TenantMfaReport -GroupId $groupId -IncludeDisabled:(-not $enabledOnly) -IncludeGuests:$includeGuests `
+        $result = Invoke-M365TenantMfaReport -GroupId $groupId -IncludeDisabled:(-not $enabledOnly) -IncludeGuests:$includeGuests -IncludeSignIn:$includeSignIn `
             -OnProgress { param($Message) Set-ReportStatus $Message } `
             -OnWarning { param($Message) Write-UiLog $Message 'Warning' } `
             -OnRows { param($Rows, $Done, $Total) Add-ReportRows -Rows $Rows -Done $Done -Total $Total } `
@@ -1158,29 +1212,34 @@ function Start-TenantReport {
     }
 }
 
-function Set-ReportTenantText {
-    $data = $script:ReportData
-    $name = if ($data.TenantName) { '{0} ({1})' -f $data.TenantName, $data.TenantId } else { $data.TenantId }
-    $script:Rpt.TxtRptTenant.Text = T 'Header.Tenant' $name
-}
-
-function Connect-ReportView {
-    # Own view per window and collection: sorted red -> yellow -> green, filtered by tile, admins and search.
+function Find-ReportGroup {
     $r = $script:Rpt
-    $view = [System.Windows.Data.ListCollectionView]::new($script:ReportData.Rows)
-    $view.SortDescriptions.Add((New-Object System.ComponentModel.SortDescription 'LevelOrder', 'Ascending'))
-    $view.SortDescriptions.Add((New-Object System.ComponentModel.SortDescription 'DisplayName', 'Ascending'))
-    $view.Filter = [Predicate[object]]{
-        param($row)
-        $state = $script:Rpt
-        if ($state.LevelFilter -and $row.Level -ne $state.LevelFilter) { return $false }
-        if ($state.AdminsOnly -and -not $row.IsAdmin) { return $false }
-        if ($state.SearchText -and $row.SearchText.IndexOf($state.SearchText, [StringComparison]::OrdinalIgnoreCase) -lt 0) { return $false }
-        $true
+    $term = $r.TxtRptGroupSearch.Text.Trim()
+    if (-not $term) {
+        Show-Message -Text (T 'Report.GroupSearchEmpty') -Title (T 'Report.Title')
+        return
     }
-    $r.View = $view
-    $r.DgRpt.ItemsSource = $view
-    Update-ReportCounts
+    try {
+        Set-ReportBusy $true
+        Set-ConnectionStatus (Request-M365GraphScopes -Scopes (Get-M365ReportScopes))
+        $groups = @(Find-M365Group -SearchTerm $term)
+    }
+    catch {
+        Write-UiError -Message $_.Exception.Message -Title (T 'Report.Title')
+        return
+    }
+    finally {
+        Set-ReportBusy $false
+    }
+
+    $r.CmbRptGroup.ItemsSource = $groups
+    if (-not $groups.Count) {
+        Show-Message -Text (T 'Report.NoGroups' $term) -Title (T 'Report.Title')
+        return
+    }
+    $r.CmbRptGroup.SelectedIndex = 0
+    if ($groups.Count -gt 1) { $r.CmbRptGroup.IsDropDownOpen = $true }
+    Set-ReportStatus (T 'Report.GroupsFound' $groups.Count)
 }
 
 function Export-TenantReport {
@@ -1204,8 +1263,7 @@ function Export-TenantReport {
     try {
         Set-ReportBusy $true
         Set-ReportStatus (T 'Report.Exporting' $rows.Count)
-        $tenant = if ($data.TenantName) { '{0} ({1})' -f $data.TenantName, $data.TenantId } else { $data.TenantId }
-        Export-M365MfaReportXlsx -Path $dialog.FileName -Rows $rows -Tenant $tenant -ScopeText $data.ScopeText -FilterText (Get-ReportFilterText)
+        Export-M365MfaReportXlsx -Path $dialog.FileName -Rows $rows -Tenant (Get-ReportTenantLabel) -ScopeText $data.ScopeText -FilterText (Get-ReportFilterText)
         Set-ReportStatus (T 'Report.Exported' $dialog.FileName)
         Write-UiLog (T 'Report.Exported' $dialog.FileName) 'Success'
     }
@@ -1235,14 +1293,14 @@ function Show-TenantReportWindow {
 
     $script:Rpt = @{
         Window = $dialog; View = $null; Running = $false; Cancel = $false; CloseRequested = $false
-        LevelFilter = $null; AdminsOnly = $false; SearchText = ''; SelectedUser = $null
+        LevelFilter = $null; AdminsOnly = $false; InactiveOnly = $false; SearchText = ''; SelectedUser = $null
     }
     foreach ($name in @(
         'TxtRptTenant', 'CmbRptScope', 'PnlRptGroup', 'TxtRptGroupSearch', 'BtnRptFindGroup', 'CmbRptGroup'
         'ChkRptEnabledOnly', 'ChkRptGuests', 'BtnRptStart', 'BtnRptCancel'
         'RbRptAll', 'RbRptRed', 'RbRptYellow', 'RbRptGreen'
-        'TxtRptCountAll', 'TxtRptCountRed', 'TxtRptCountYellow', 'TxtRptCountGreen', 'TxtRptCountAdminsRed'
-        'TxtRptSearch', 'ChkRptAdminsOnly', 'TxtRptVisible', 'BtnRptExport', 'DgRpt', 'TxtRptEmpty', 'PrgRpt', 'TxtRptStatus'
+        'TxtRptCountAll', 'TxtRptCountRed', 'TxtRptCountYellow', 'TxtRptCountGreen', 'TxtRptCountAdminsRed', 'TxtRptCountInactive', 'TxtRptInactiveLabel'
+        'TxtRptSearch', 'ChkRptAdminsOnly', 'ChkRptInactiveOnly', 'TxtRptVisible', 'BtnRptExport', 'DgRpt', 'TxtRptEmpty', 'PrgRpt', 'TxtRptStatus'
     )) {
         $script:Rpt[$name] = $dialog.FindName($name)
     }
@@ -1254,11 +1312,15 @@ function Show-TenantReportWindow {
     $binding = New-Object System.Windows.Data.Binding 'PasswordLastSet'
     $binding.StringFormat = T 'Format.DateTime'
     $dateColumn.Binding = $binding
+    # Texts with the inactivity threshold
+    $inactiveDays = Get-M365ReportInactiveDays
+    $r.TxtRptInactiveLabel.Text = T 'Report.Tile.Inactive' $inactiveDays
+    $r.ChkRptInactiveOnly.Content = T 'Report.InactiveOnly' $inactiveDays
 
     # Keep the last report of this tenant, so it is still there when the window is reopened.
     $tenantId = if ($script:Context) { $script:Context.TenantId } else { '' }
     if ($null -eq $script:ReportData -or $script:ReportData.TenantId -ne $tenantId) { $script:ReportData = New-ReportData }
-    Set-ReportTenantText
+    $r.TxtRptTenant.Text = T 'Header.Tenant' (Get-ReportTenantLabel)
     Connect-ReportView
     Set-ReportBusy $false
     Set-ReportStatus $(if ($script:ReportData.Rows.Count) { T 'Report.Status.Previous' $script:ReportData.ScopeText } else { '' })
@@ -1267,36 +1329,7 @@ function Show-TenantReportWindow {
         $script:Rpt.PnlRptGroup.Visibility = if ([string]$script:Rpt.CmbRptScope.SelectedItem.Tag -eq 'Group') { 'Visible' } else { 'Collapsed' }
     })
 
-    $findGroup = {
-        $state = $script:Rpt
-        $term = $state.TxtRptGroupSearch.Text.Trim()
-        if (-not $term) {
-            Show-Message -Text (T 'Report.GroupSearchEmpty') -Title (T 'Report.Title')
-            return
-        }
-        try {
-            Set-ReportBusy $true
-            Set-ConnectionStatus (Request-M365GraphScopes -Scopes (Get-M365ReportScopes))
-            $groups = @(Find-M365Group -SearchTerm $term)
-        }
-        catch {
-            Write-UiError -Message $_.Exception.Message -Title (T 'Report.Title')
-            return
-        }
-        finally {
-            Set-ReportBusy $false
-        }
-        $state.CmbRptGroup.ItemsSource = $groups
-        if ($groups.Count) {
-            $state.CmbRptGroup.SelectedIndex = 0
-            if ($groups.Count -gt 1) { $state.CmbRptGroup.IsDropDownOpen = $true }
-            Set-ReportStatus (T 'Report.GroupsFound' $groups.Count)
-        }
-        else {
-            Show-Message -Text (T 'Report.NoGroups' $term) -Title (T 'Report.Title')
-        }
-    }
-    $r.BtnRptFindGroup.Add_Click($findGroup)
+    $r.BtnRptFindGroup.Add_Click({ Find-ReportGroup })
     $r.TxtRptGroupSearch.Add_KeyDown({
         param($src, $keyArgs)
         if ($keyArgs.Key -eq 'Enter') { $script:Rpt.BtnRptFindGroup.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent)) }
@@ -1325,6 +1358,7 @@ function Show-TenantReportWindow {
         })
     }
     $r.ChkRptAdminsOnly.Add_Click({ Update-ReportFilter })
+    $r.ChkRptInactiveOnly.Add_Click({ Update-ReportFilter })
 
     # Search: filter shortly after the last keystroke
     $r.SearchTimer = New-Object System.Windows.Threading.DispatcherTimer

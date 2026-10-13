@@ -384,6 +384,18 @@
     "Report.Summary.Total": "Total",
     "Report.Summary.Admins": "Utilizadores com funções administrativas",
     "Report.Summary.AdminsRed": "dos quais a vermelho",
+    "Report.Col.LastSignIn": "Último início de sessão",
+    "Report.Col.DaysSinceSignIn": "Dias desde",
+    "Report.Never": "Nunca",
+    "Report.InactiveOnly": "Apenas inativos (> {0} dias ou nunca)",
+    "Report.InactiveOnlyBox.ToolTip": "Mostra apenas contas sem início de sessão no período indicado ou que nunca iniciaram sessão",
+    "Report.Tile.Inactive": "Inativos (> {0} dias ou nunca)",
+    "Report.Tile.InactiveBox.ToolTip": "Contas sem início de sessão bem-sucedido neste período. \"-\" = dados de início de sessão indisponíveis.",
+    "Report.SignInUnavailable": "Não é possível ler o último início de sessão (requer Entra ID P1/P2 e, p. ex., a função Leitor de relatórios): {0}",
+    "Report.SignInNoPermission": "A permissão AuditLog.Read.All não foi concedida – o relatório é criado sem último início de sessão.",
+    "Report.Summary.Inactive": "Contas inativas (> {0} dias ou nunca iniciaram sessão)",
+    "Report.Summary.InactiveAdmins": "das quais com funções administrativas",
+    "Report.Summary.SignInNotAvailable": "indisponível (falta licença ou permissão)",
     "Log.ReportStarted": "Relatório MFA iniciado ({0}).",
     "Log.ReportFinished": "Relatório MFA concluído: {0} utilizadores – vermelho {1}, amarelo {2}, verde {3}."
 }

@@ -384,6 +384,18 @@
     "Report.Summary.Total": "Total",
     "Report.Summary.Admins": "Utilisateurs avec rôles d'administration",
     "Report.Summary.AdminsRed": "dont en rouge",
+    "Report.Col.LastSignIn": "Dernière connexion",
+    "Report.Col.DaysSinceSignIn": "Jours depuis",
+    "Report.Never": "Jamais",
+    "Report.InactiveOnly": "Inactifs uniquement (> {0} jours ou jamais)",
+    "Report.InactiveOnlyBox.ToolTip": "Affiche uniquement les comptes sans connexion pendant la période indiquée ou jamais connectés",
+    "Report.Tile.Inactive": "Inactifs (> {0} jours ou jamais)",
+    "Report.Tile.InactiveBox.ToolTip": "Comptes sans connexion réussie pendant cette période. « - » = données de connexion indisponibles.",
+    "Report.SignInUnavailable": "La dernière connexion ne peut pas être lue (nécessite Entra ID P1/P2 et p. ex. le rôle Lecteur de rapports) : {0}",
+    "Report.SignInNoPermission": "L'autorisation AuditLog.Read.All n'a pas été accordée – le rapport est créé sans dernière connexion.",
+    "Report.Summary.Inactive": "Comptes inactifs (> {0} jours ou jamais connectés)",
+    "Report.Summary.InactiveAdmins": "dont avec rôles d'administration",
+    "Report.Summary.SignInNotAvailable": "indisponible (licence ou autorisation manquante)",
     "Log.ReportStarted": "Rapport MFA démarré ({0}).",
     "Log.ReportFinished": "Rapport MFA terminé : {0} utilisateurs – rouge {1}, jaune {2}, vert {3}."
 }

@@ -384,6 +384,18 @@
     "Report.Summary.Total": "Total",
     "Report.Summary.Admins": "Users with administrative roles",
     "Report.Summary.AdminsRed": "of which red",
+    "Report.Col.LastSignIn": "Last sign-in",
+    "Report.Col.DaysSinceSignIn": "Days since",
+    "Report.Never": "Never",
+    "Report.InactiveOnly": "Inactive only (> {0} days or never)",
+    "Report.InactiveOnlyBox.ToolTip": "Shows only accounts without a sign-in in the given period or that have never signed in",
+    "Report.Tile.Inactive": "Inactive (> {0} days or never)",
+    "Report.Tile.InactiveBox.ToolTip": "Accounts without a successful sign-in in this period. \"-\" = sign-in data not available.",
+    "Report.SignInUnavailable": "The last sign-in cannot be read (requires Entra ID P1/P2 and e.g. the Reports Reader role): {0}",
+    "Report.SignInNoPermission": "Permission AuditLog.Read.All was not granted – the report is created without last sign-in.",
+    "Report.Summary.Inactive": "Inactive accounts (> {0} days or never signed in)",
+    "Report.Summary.InactiveAdmins": "of which with administrative roles",
+    "Report.Summary.SignInNotAvailable": "not available (license or permission missing)",
     "Log.ReportStarted": "MFA report started ({0}).",
     "Log.ReportFinished": "MFA report finished: {0} users – red {1}, yellow {2}, green {3}."
 }

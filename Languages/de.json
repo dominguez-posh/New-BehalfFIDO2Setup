@@ -384,6 +384,18 @@
     "Report.Summary.Total": "Gesamt",
     "Report.Summary.Admins": "Benutzer mit administrativen Rollen",
     "Report.Summary.AdminsRed": "davon Rot",
+    "Report.Col.LastSignIn": "Letzte Anmeldung",
+    "Report.Col.DaysSinceSignIn": "Tage seit",
+    "Report.Never": "Nie",
+    "Report.InactiveOnly": "Nur inaktive (> {0} Tage oder nie)",
+    "Report.InactiveOnlyBox.ToolTip": "Zeigt nur Konten ohne Anmeldung im angegebenen Zeitraum oder die sich noch nie angemeldet haben",
+    "Report.Tile.Inactive": "Inaktiv (> {0} Tage oder nie)",
+    "Report.Tile.InactiveBox.ToolTip": "Konten ohne erfolgreiche Anmeldung in diesem Zeitraum. „-“ = Anmeldedaten nicht verfügbar.",
+    "Report.SignInUnavailable": "Die letzte Anmeldung kann nicht gelesen werden (erfordert Entra ID P1/P2 und z. B. die Rolle Berichtsleser): {0}",
+    "Report.SignInNoPermission": "Berechtigung AuditLog.Read.All wurde nicht erteilt – der Report wird ohne letzte Anmeldung erstellt.",
+    "Report.Summary.Inactive": "Inaktive Konten (> {0} Tage oder nie angemeldet)",
+    "Report.Summary.InactiveAdmins": "davon mit administrativen Rollen",
+    "Report.Summary.SignInNotAvailable": "nicht verfügbar (Lizenz oder Berechtigung fehlt)",
     "Log.ReportStarted": "MFA-Report gestartet ({0}).",
     "Log.ReportFinished": "MFA-Report fertig: {0} Benutzer – Rot {1}, Gelb {2}, Grün {3}."
 }

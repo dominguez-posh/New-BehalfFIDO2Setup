@@ -384,6 +384,18 @@
     "Report.Summary.Total": "Totaal",
     "Report.Summary.Admins": "Gebruikers met beheerdersrollen",
     "Report.Summary.AdminsRed": "waarvan rood",
+    "Report.Col.LastSignIn": "Laatste aanmelding",
+    "Report.Col.DaysSinceSignIn": "Dagen sinds",
+    "Report.Never": "Nooit",
+    "Report.InactiveOnly": "Alleen inactief (> {0} dagen of nooit)",
+    "Report.InactiveOnlyBox.ToolTip": "Toont alleen accounts zonder aanmelding in de opgegeven periode of die zich nooit hebben aangemeld",
+    "Report.Tile.Inactive": "Inactief (> {0} dagen of nooit)",
+    "Report.Tile.InactiveBox.ToolTip": "Accounts zonder geslaagde aanmelding in deze periode. \"-\" = aanmeldgegevens niet beschikbaar.",
+    "Report.SignInUnavailable": "De laatste aanmelding kan niet worden gelezen (vereist Entra ID P1/P2 en bijv. de rol Rapportlezer): {0}",
+    "Report.SignInNoPermission": "Machtiging AuditLog.Read.All is niet verleend – het rapport wordt zonder laatste aanmelding gemaakt.",
+    "Report.Summary.Inactive": "Inactieve accounts (> {0} dagen of nooit aangemeld)",
+    "Report.Summary.InactiveAdmins": "waarvan met beheerdersrollen",
+    "Report.Summary.SignInNotAvailable": "niet beschikbaar (licentie of machtiging ontbreekt)",
     "Log.ReportStarted": "MFA-rapport gestart ({0}).",
     "Log.ReportFinished": "MFA-rapport klaar: {0} gebruikers – rood {1}, geel {2}, groen {3}."
 }
