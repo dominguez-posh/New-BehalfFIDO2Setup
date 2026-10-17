@@ -119,6 +119,14 @@ Consoante o método, surgem os campos adequados (p. ex. o número de série) e u
 > [!IMPORTANT]
 > **TAP, segredos e códigos QR são mostrados apenas uma vez.** Não ficam no registo e não podem ser recuperados mais tarde. Se guardar um código QR com "Guardar código QR …", o ficheiro contém o segredo – elimine-o após a programação.
 
+### MFA fictícia com hrdnr
+
+Se o inquilino for gerido com o hrdnr, o segredo de um token de MFA fictícia pode ser **guardado encriptado** em vez de descartado. Numa emergência, o hrdnr pode então mostrar o código atual de 6 dígitos sem ser preciso configurar outro método.
+
+- **Chave do hrdnr (opcional):** aparece quando «MFA fictícia» está selecionada. Cole a chave pública do hrdnr (**Utilizadores e MFA → Chave para o M365 MFA Manager**, formato `hrdnr-fakemfa:1:…`) ou clique em **«Carregar do inquilino»** se o hrdnr a tiver guardado no inquilino (extensão `com.hrdnr.fakeMfaKey` da organização). A ferramenta memoriza a chave por inquilino.
+- O segredo é encriptado com esta chave (RSA-OAEP-SHA256) e guardado na extensão aberta `com.hrdnr.fakeMfa` do utilizador (número de série, ID da chave, segredo encriptado). Só o hrdnr tem a chave privada; a própria ferramenta não consegue voltar a ler o segredo.
+- Sem chave, a MFA fictícia funciona como antes: o segredo é descartado de imediato.
+
 ---
 
 ## Criar uma conta de emergência
@@ -287,6 +295,13 @@ Adicionalmente, para o guia de MFA:
 | `User.ReadWrite.All` | Guardar a data de envio no objeto do utilizador |
 
 Para guardar a data de envio é necessária uma função que possa alterar utilizadores, p. ex. **Administrador de utilizadores**.
+
+Além disso, para a MFA fictícia com chave do hrdnr:
+
+| Permissão | Para quê |
+|---|---|
+| `User.ReadWrite.All` | Guardar o segredo encriptado no objeto do utilizador |
+| `Organization.Read.All` | Carregar a chave do hrdnr do inquilino (apenas para «Carregar do inquilino») |
 
 ### Funções do Entra necessárias para a sua própria conta
 

@@ -119,6 +119,14 @@ A seconda del metodo compaiono i campi appropriati (ad es. il numero di serie) e
 > [!IMPORTANT]
 > **TAP, segreti e codici QR vengono mostrati una sola volta.** Non compaiono nel log e non possono essere recuperati in seguito. Se un codice QR viene salvato con "Salva codice QR …", il file contiene il segreto – eliminarlo dopo la programmazione.
 
+### MFA fittizia con hrdnr
+
+Se il tenant è gestito con hrdnr, il segreto di un token di MFA fittizia può essere **salvato cifrato** invece di essere eliminato. In caso di emergenza hrdnr può così mostrare il codice attuale a 6 cifre senza dover configurare un altro metodo.
+
+- **Chiave hrdnr (facoltativa):** compare quando è selezionata «MFA fittizia». Incollare la chiave pubblica di hrdnr (**Utenti e MFA → Chiave per M365 MFA Manager**, formato `hrdnr-fakemfa:1:…`) oppure fare clic su **«Carica dal tenant»** se hrdnr l'ha salvata nel tenant (estensione `com.hrdnr.fakeMfaKey` dell'organizzazione). Lo strumento memorizza la chiave per tenant.
+- Il segreto viene cifrato con questa chiave (RSA-OAEP-SHA256) e salvato nell'estensione aperta `com.hrdnr.fakeMfa` dell'utente (numero di serie, ID chiave, segreto cifrato). Solo hrdnr possiede la chiave privata; lo strumento stesso non può rileggere il segreto.
+- Senza chiave la MFA fittizia funziona come prima: il segreto viene eliminato subito.
+
 ---
 
 ## Creare un account di emergenza
@@ -287,6 +295,13 @@ Inoltre, per la guida MFA:
 | `User.ReadWrite.All` | Salvare la data di invio nell'oggetto utente |
 
 Per salvare la data di invio serve un ruolo che possa modificare gli utenti, ad es. **Amministratore utenti**.
+
+Inoltre, per la MFA fittizia con chiave hrdnr:
+
+| Autorizzazione | A cosa serve |
+|---|---|
+| `User.ReadWrite.All` | Salvare il segreto cifrato nell'oggetto utente |
+| `Organization.Read.All` | Caricare la chiave hrdnr dal tenant (solo per «Carica dal tenant») |
 
 ### Ruoli Entra necessari per il proprio account
 

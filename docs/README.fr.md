@@ -119,6 +119,14 @@ Selon la méthode, des champs adaptés (p. ex. le numéro de série) et une cour
 > [!IMPORTANT]
 > **Les TAP, secrets et codes QR ne sont affichés qu'une seule fois.** Ils ne figurent pas dans le journal et ne peuvent pas être récupérés ultérieurement. Si un code QR est enregistré via « Enregistrer le code QR … », le fichier contient le secret – supprimez-le après la programmation.
 
+### MFA fictive avec hrdnr
+
+Si le locataire est géré avec hrdnr, le secret d'un jeton de MFA fictive peut être **enregistré chiffré** au lieu d'être supprimé. hrdnr peut alors afficher le code actuel à 6 chiffres en cas d'urgence, sans qu'une autre méthode doive être configurée.
+
+- **Clé hrdnr (facultative) :** apparaît lorsque « MFA fictive » est sélectionnée. Collez la clé publique de hrdnr (**Utilisateurs et MFA → Clé pour le M365 MFA Manager**, format `hrdnr-fakemfa:1:…`) ou cliquez sur **« Charger depuis le locataire »** si hrdnr l'a enregistrée dans le locataire (extension `com.hrdnr.fakeMfaKey` de l'organisation). L'outil mémorise la clé par locataire.
+- Le secret est chiffré avec cette clé (RSA-OAEP-SHA256) et enregistré dans l'extension ouverte `com.hrdnr.fakeMfa` de l'utilisateur (numéro de série, ID de clé, secret chiffré). Seul hrdnr détient la clé privée ; l'outil lui-même ne peut pas relire le secret.
+- Sans clé, la MFA fictive fonctionne comme avant : le secret est supprimé immédiatement.
+
 ---
 
 ## Créer un compte d'urgence
@@ -287,6 +295,13 @@ En plus, pour le guide MFA :
 | `User.ReadWrite.All` | Enregistrer la date d'envoi dans l'objet utilisateur |
 
 L'enregistrement de la date d'envoi nécessite un rôle autorisé à modifier les utilisateurs, p. ex. **Administrateur d'utilisateurs**.
+
+En plus, pour la MFA fictive avec clé hrdnr :
+
+| Autorisation | Utilité |
+|---|---|
+| `User.ReadWrite.All` | Enregistrer le secret chiffré dans l'objet utilisateur |
+| `Organization.Read.All` | Charger la clé hrdnr depuis le locataire (uniquement pour « Charger depuis le locataire ») |
 
 ### Rôles Entra nécessaires pour votre propre compte
 

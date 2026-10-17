@@ -374,6 +374,19 @@
                                 <TextBlock Uid="Config.Secret" Style="{StaticResource Label}"/>
                                 <PasswordBox Name="PwdSecret" Margin="0,4,0,0" Padding="10,8" BorderBrush="{StaticResource Border}"/>
                             </StackPanel>
+                            <!-- Fake MFA: public hrdnr key of the tenant (optional) -> secret stored encrypted for hrdnr -->
+                            <StackPanel Name="PnlHrdnrKey" Visibility="Collapsed" Margin="4,10,4,0">
+                                <TextBlock Uid="Config.HrdnrKey" Style="{StaticResource Label}"/>
+                                <Grid Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Name="TxtHrdnrKey" FontFamily="Consolas"/>
+                                    <Button Grid.Column="1" Name="BtnLoadHrdnrKey" Uid="Config.HrdnrKey.Load" Margin="6,0,0,0"/>
+                                </Grid>
+                                <TextBlock Name="TxtHrdnrKeyStatus" Style="{StaticResource Label}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                            </StackPanel>
                             <TextBlock Name="TxtMethodHint" Style="{StaticResource Label}" TextWrapping="Wrap" Margin="4,10,4,0"/>
                             <Button Name="BtnExecute" Uid="Config.Start" IsEnabled="False" Margin="4,12,4,4"/>
                         </StackPanel>

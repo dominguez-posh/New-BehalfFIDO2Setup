@@ -354,12 +354,104 @@ function Start-ProgrammableTotpProvisioning {
 function New-FakeMfaToken {
     # TOTP with a random secret that is discarded after activation:
     # at sign-in, an MFA method is requested that nobody can satisfy.
+    # The secret is returned only so it can be stored encrypted for hrdnr (see Start-FakeMfaProvisioning).
     param([Parameter(Mandatory)]$User)
     $serial = 'FAKE-' + (New-RandomBase32 -Length 16)
-    $token = New-HardwareOathTotp -User $User -SerialNumber $serial -SecretKey (New-TotpSecret) `
+    $secret = New-TotpSecret
+    $token = New-HardwareOathTotp -User $User -SerialNumber $serial -SecretKey $secret `
         -DisplayName 'Fake-MFA' -Model 'Fake-MFA'
-    $token | Add-Member -NotePropertyName SerialNumber -NotePropertyValue $serial -PassThru
+    $token | Add-Member -NotePropertyName SerialNumber -NotePropertyValue $serial
+    $token | Add-Member -NotePropertyName Secret -NotePropertyValue $secret -PassThru
 }
+
+#region hrdnr: fake MFA secret stored encrypted
+
+# hrdnr keeps one RSA key pair per tenant. With its public key, the secret of a
+# fake MFA token is stored encrypted (RSA-OAEP-SHA256) in the open extension com.hrdnr.fakeMfa on the user; only
+# hrdnr can decrypt it and show the current 6-digit code in an emergency. The public key comes either from the tenant
+# (open extension com.hrdnr.fakeMfaKey on the organization, written by hrdnr) or is pasted from hrdnr.
+# Format: hrdnr-fakemfa:1:<keyId>:<modulus Base64>:<exponent Base64>
+$script:HrdnrSecretExtension = 'com.hrdnr.fakeMfa'
+$script:HrdnrKeyExtension    = 'com.hrdnr.fakeMfaKey'
+
+function ConvertFrom-HrdnrFakeMfaKey {
+    # Checks the key and returns KeyId, Modulus and Exponent (bytes). Throws on an invalid key.
+    param([Parameter(Mandatory)][string]$Key)
+    $parts = $Key.Trim() -split ':'
+    $valid = $parts.Count -eq 5 -and $parts[0] -eq 'hrdnr-fakemfa' -and $parts[1] -eq '1' -and $parts[2] -match '^[0-9a-f]{16}$'
+    if ($valid) {
+        try {
+            $modulus = [Convert]::FromBase64String($parts[3])
+            $exponent = [Convert]::FromBase64String($parts[4])
+            $valid = $modulus.Length -ge 256 -and $exponent.Length -ge 1 -and $exponent.Length -le 8
+        }
+        catch { $valid = $false }
+    }
+    if (-not $valid) { throw (T 'Prov.Fake.HrdnrInvalid') }
+    [pscustomobject]@{ KeyId = $parts[2]; Modulus = $modulus; Exponent = $exponent; Key = $Key.Trim() }
+}
+
+function Protect-HrdnrFakeMfaSecret {
+    # Base32 secret, encrypted RSA-OAEP-SHA256 with the hrdnr key of the tenant, as Base64.
+    # RSACng: RSACryptoServiceProvider (Windows PowerShell 5.1 default) only supports OAEP with SHA-1.
+    param([Parameter(Mandatory)][string]$Secret, [Parameter(Mandatory)]$HrdnrKey)
+    $rsa = New-Object System.Security.Cryptography.RSACng
+    try {
+        $parameters = New-Object System.Security.Cryptography.RSAParameters
+        $parameters.Modulus = $HrdnrKey.Modulus
+        $parameters.Exponent = $HrdnrKey.Exponent
+        $rsa.ImportParameters($parameters)
+        $plain = [Text.Encoding]::ASCII.GetBytes($Secret)
+        try { [Convert]::ToBase64String($rsa.Encrypt($plain, [System.Security.Cryptography.RSAEncryptionPadding]::OaepSHA256)) }
+        finally { [Array]::Clear($plain, 0, $plain.Length) }
+    }
+    finally { $rsa.Dispose() }
+}
+
+function Set-HrdnrFakeMfaSecret {
+    # Writes (or replaces) the open extension com.hrdnr.fakeMfa on the user.
+    param(
+        [Parameter(Mandatory)]$User,
+        [Parameter(Mandatory)][string]$SerialNumber,
+        [Parameter(Mandatory)][string]$KeyId,
+        [Parameter(Mandatory)][string]$EncryptedSecret
+    )
+    $userPart = [uri]::EscapeDataString($User.Id)
+    $body = @{
+        serialNumber    = $SerialNumber
+        keyId           = $KeyId
+        secret          = $EncryptedSecret
+        algorithm       = 'RSA-OAEP-256'
+        createdDateTime = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    }
+    $exists = $false
+    try { $exists = $null -ne (Invoke-M365GraphRequest -Uri "v1.0/users/$userPart/extensions/$script:HrdnrSecretExtension") }
+    catch { $exists = $false }
+    if ($exists) {
+        Invoke-M365GraphRequest -Method PATCH -Uri "v1.0/users/$userPart/extensions/$script:HrdnrSecretExtension" -Body $body | Out-Null
+    }
+    else {
+        $body['@odata.type'] = '#microsoft.graph.openTypeExtension'
+        $body['extensionName'] = $script:HrdnrSecretExtension
+        Invoke-M365GraphRequest -Method POST -Uri "v1.0/users/$userPart/extensions" -Body $body | Out-Null
+    }
+}
+
+function Get-HrdnrFakeMfaKeyFromTenant {
+    # Public hrdnr key stored in the tenant (organization extension), or $null if there is none or it cannot be read
+    # (reading organization extensions may need Organization.Read.All).
+    try {
+        $org = @((Invoke-M365GraphRequest -Uri 'v1.0/organization?$select=id')['value'])[0]
+        if (-not $org) { return $null }
+        $ext = Invoke-M365GraphRequest -Uri "v1.0/organization/$([uri]::EscapeDataString([string]$org['id']))/extensions/$script:HrdnrKeyExtension"
+        $key = [string]$ext['key']
+        if (-not $key) { return $null }
+        ConvertFrom-HrdnrFakeMfaKey -Key $key
+    }
+    catch { $null }
+}
+
+#endregion
 
 function Remove-HardwareOathToken {
     # Removes a token from the user and from the device inventory.
@@ -372,9 +464,23 @@ function Remove-HardwareOathToken {
 function Start-FakeMfaProvisioning {
     param([Parameter(Mandatory)]$User, [hashtable]$Options = @{})
 
+    # Options.HrdnrKey: public hrdnr key of the tenant -> store the secret encrypted for hrdnr instead of discarding it
+    $hrdnrKey = if ($Options['HrdnrKey']) { ConvertFrom-HrdnrFakeMfaKey -Key $Options['HrdnrKey'] } else { $null }
+
     $token = New-FakeMfaToken -User $User
-    New-ProvisioningResult -Message (T 'Prov.Fake.Done' $token.SerialNumber $User.UserPrincipalName) `
-        -AddedMethodIds @($token.MethodId)
+    $message = T 'Prov.Fake.Done' $token.SerialNumber $User.UserPrincipalName
+    if ($hrdnrKey) {
+        try {
+            $encrypted = Protect-HrdnrFakeMfaSecret -Secret $token.Secret -HrdnrKey $hrdnrKey
+            Set-HrdnrFakeMfaSecret -User $User -SerialNumber $token.SerialNumber -KeyId $hrdnrKey.KeyId -EncryptedSecret $encrypted
+            $message = T 'Prov.Fake.DoneHrdnr' $token.SerialNumber $User.UserPrincipalName $hrdnrKey.KeyId
+        }
+        catch {
+            $message += ' ' + (T 'Prov.Fake.HrdnrFailed' $_.Exception.Message)
+        }
+    }
+    $token.Secret = $null
+    New-ProvisioningResult -Message $message -AddedMethodIds @($token.MethodId)
 }
 
 function Start-TemporaryAccessPassProvisioning {
@@ -614,4 +720,4 @@ function Invoke-MfaProvisioning {
     }
 }
 
-Export-ModuleMember -Function Invoke-MfaProvisioning, New-M365BreakGlassAccount
+Export-ModuleMember -Function Invoke-MfaProvisioning, New-M365BreakGlassAccount, ConvertFrom-HrdnrFakeMfaKey, Get-HrdnrFakeMfaKeyFromTenant

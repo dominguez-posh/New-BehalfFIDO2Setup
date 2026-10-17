@@ -52,17 +52,31 @@ function Read-Settings {
     [pscustomobject]@{ Language = 'en'; GuideSender = '' }
 }
 
+function ConvertTo-HrdnrKeyMap {
+    # settings.json: HrdnrKeys = { "<tenant ID>": "hrdnr-fakemfa:1:..." }
+    param($Value)
+    $map = @{}
+    if ($null -ne $Value) {
+        foreach ($p in $Value.PSObject.Properties) { if ($p.Value) { $map[[string]$p.Name] = [string]$p.Value } }
+    }
+    $map
+}
+
 function Save-Settings {
     try {
         $folder = Split-Path -Parent $script:SettingsPath
         if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
-        [pscustomobject]@{ Language = Get-UiLanguage; GuideSender = $script:GuideSender } | ConvertTo-Json | Set-Content -LiteralPath $script:SettingsPath -Encoding UTF8
+        [pscustomobject]@{ Language = Get-UiLanguage; GuideSender = $script:GuideSender; HrdnrKeys = [pscustomobject]$script:HrdnrKeys } |
+            ConvertTo-Json | Set-Content -LiteralPath $script:SettingsPath -Encoding UTF8
     }
     catch { }
 }
 
 $settings = Read-Settings
 $script:GuideSender = if ($settings.PSObject.Properties['GuideSender']) { [string]$settings.GuideSender } else { '' }
+# Public hrdnr key per tenant (fake MFA with the secret stored encrypted for hrdnr)
+$script:HrdnrKeyTenant = ""
+$script:HrdnrKeys = ConvertTo-HrdnrKeyMap $(if ($settings.PSObject.Properties['HrdnrKeys']) { $settings.HrdnrKeys } else { $null })
 Initialize-Localization -Path (Join-Path $script:AppRoot 'Languages') -Language $(if ($settings.PSObject.Properties['Language']) { $settings.Language } else { 'en' })
 
 [xml]$xaml = Get-Content -LiteralPath (Join-Path $script:AppRoot 'UI\MainWindow.xaml') -Raw -Encoding UTF8
@@ -81,6 +95,7 @@ $controlNames = @(
     'BdgMfa', 'DotMfa', 'TxtMfaLevel', 'TxtMfaHints', 'BtnSendGuide', 'TxtGuideStatus', 'TxtRoleSummary', 'BtnShowRoles', 'LstRoles'
     # Configure method
     'CmbMethod', 'PnlSerial', 'LblSerial', 'TxtSerial', 'PnlSecret', 'PwdSecret', 'TxtMethodHint', 'BtnExecute'
+    'PnlHrdnrKey', 'TxtHrdnrKey', 'BtnLoadHrdnrKey', 'TxtHrdnrKeyStatus'
     # Result: Temporary Access Pass
     'PnlTap', 'TxtTapUser', 'TxtTapValue', 'TxtTapValidity', 'BtnCopyTap', 'BtnHideTap'
     # Result: programmable TOTP card
@@ -105,11 +120,11 @@ $script:Rpt = $null          # Controls and state of the open report window
 
 # Input fields and hints per method (key = method ID from the Tag in the dropdown)
 $script:MethodUi = @{
-    Fido2            = @{ Serial = 'Config.Serial.Fido2'; Secret = $false; Hint = 'Config.Hint.Fido2' }
-    FixedTotp        = @{ Serial = 'Config.Serial.Card';  Secret = $true;  Hint = 'Config.Hint.FixedTotp' }
-    ProgrammableTotp = @{ Serial = 'Config.Serial.Card';  Secret = $false; Hint = 'Config.Hint.ProgrammableTotp' }
-    Tap              = @{ Serial = $null;                 Secret = $false; Hint = 'Config.Hint.Tap' }
-    FakeMfa          = @{ Serial = $null;                 Secret = $false; Hint = 'Config.Hint.FakeMfa' }
+    Fido2            = @{ Serial = 'Config.Serial.Fido2'; Secret = $false; HrdnrKey = $false; Hint = 'Config.Hint.Fido2' }
+    FixedTotp        = @{ Serial = 'Config.Serial.Card';  Secret = $true;  HrdnrKey = $false; Hint = 'Config.Hint.FixedTotp' }
+    ProgrammableTotp = @{ Serial = 'Config.Serial.Card';  Secret = $false; HrdnrKey = $false; Hint = 'Config.Hint.ProgrammableTotp' }
+    Tap              = @{ Serial = $null;                 Secret = $false; HrdnrKey = $false; Hint = 'Config.Hint.Tap' }
+    FakeMfa          = @{ Serial = $null;                 Secret = $false; HrdnrKey = $true;  Hint = 'Config.Hint.FakeMfa' }
 }
 
 #endregion
@@ -363,6 +378,35 @@ function Update-MethodInputs {
     $script:PnlSecret.Visibility = if ($ui -and $ui.Secret) { 'Visible' } else { 'Collapsed' }
     $script:TxtMethodHint.Text = if ($ui) { T $ui.Hint } else { '' }
     if ($ui -and $ui.Serial) { $script:LblSerial.Text = T $ui.Serial }
+    $script:PnlHrdnrKey.Visibility = if ($ui -and $ui.HrdnrKey) { 'Visible' } else { 'Collapsed' }
+    if ($ui -and $ui.HrdnrKey) { Update-HrdnrKeyInput }
+}
+
+function Get-TenantHrdnrKey {
+    # Key stored in settings.json for the connected tenant
+    $tenantId = if ($script:Context) { [string]$script:Context.TenantId } else { '' }
+    if ($tenantId -and $script:HrdnrKeys.ContainsKey($tenantId)) { $script:HrdnrKeys[$tenantId] } else { '' }
+}
+
+function Save-TenantHrdnrKey {
+    param([string]$Key)
+    $tenantId = if ($script:Context) { [string]$script:Context.TenantId } else { '' }
+    if (-not $tenantId -or (Get-TenantHrdnrKey) -eq $Key) { return }
+    $script:HrdnrKeys[$tenantId] = $Key
+    Save-Settings
+}
+
+function Update-HrdnrKeyInput {
+    # Prefills the key remembered for this tenant and shows which key is used
+    param([string]$Status)
+    if ([string]::IsNullOrWhiteSpace($script:TxtHrdnrKey.Text)) { $script:TxtHrdnrKey.Text = Get-TenantHrdnrKey }
+    if ($Status) { $script:TxtHrdnrKeyStatus.Text = $Status; return }
+    $text = $script:TxtHrdnrKey.Text.Trim()
+    $script:TxtHrdnrKeyStatus.Text = if (-not $text) { T 'Config.HrdnrKey.None' }
+        else {
+            try { T 'Config.HrdnrKey.Ready' (ConvertFrom-HrdnrFakeMfaKey -Key $text).KeyId }
+            catch { $_.Exception.Message }
+        }
 }
 
 function Set-UserHitsText {
@@ -544,6 +588,12 @@ function Select-User {
 function Set-ConnectionStatus {
     param($Context)
     $script:Context = $Context
+    # the hrdnr key belongs to one tenant: drop it from the input when the tenant changes
+    $tenantId = if ($null -ne $Context) { [string]$Context.TenantId } else { "" }
+    if ($script:HrdnrKeyTenant -ne $tenantId) {
+        $script:HrdnrKeyTenant = $tenantId
+        if ($script:TxtHrdnrKey) { $script:TxtHrdnrKey.Clear(); if ($script:PnlHrdnrKey.Visibility -eq "Visible") { Update-HrdnrKeyInput } }
+    }
     if ($null -eq $Context) {
         $script:TxtConnectionStatus.Text = T 'Header.NotConnected'
         $script:TxtConnectionStatus.Foreground = '#FCA5A5'
@@ -833,6 +883,34 @@ $BtnDeleteMethod.Add_Click({
 
 $CmbMethod.Add_SelectionChanged({ Update-MethodInputs })
 
+$TxtHrdnrKey.Add_LostFocus({ Update-HrdnrKeyInput })
+
+$BtnLoadHrdnrKey.Add_Click({
+    # Public key that hrdnr stored in the tenant (organization extension com.hrdnr.fakeMfaKey)
+    if ($null -eq $script:Context) { return }
+    $found = $null
+    try {
+        Set-Busy $true
+        Set-ConnectionStatus (Request-M365GraphScopes -Scopes @('Organization.Read.All'))
+        $found = Get-HrdnrFakeMfaKeyFromTenant
+    }
+    catch {
+        Write-UiError -Message $_.Exception.Message -Title (T 'Title.HrdnrKey')
+    }
+    finally {
+        Set-Busy $false
+    }
+    if ($found) {
+        $TxtHrdnrKey.Text = $found.Key
+        Save-TenantHrdnrKey -Key $found.Key
+        Update-HrdnrKeyInput -Status (T 'Config.HrdnrKey.FromTenant' $found.KeyId)
+        Write-UiLog (T 'Config.HrdnrKey.FromTenant' $found.KeyId) 'Success'
+    }
+    else {
+        Update-HrdnrKeyInput -Status (T 'Config.HrdnrKey.NotFound')
+    }
+})
+
 $BtnExecute.Add_Click({
     if ($null -eq $script:SelectedUser) { return }
     $methodId = Get-SelectedMethodId
@@ -863,9 +941,27 @@ $BtnExecute.Add_Click({
         }
         $options.Secret = $PwdSecret.Password
     }
+    $hrdnrKey = $null
+    if ($ui.HrdnrKey) {
+        # Pasted or remembered key; otherwise the key hrdnr stored in the tenant (if readable without new consent)
+        $keyText = $TxtHrdnrKey.Text.Trim()
+        try {
+            $hrdnrKey = if ($keyText) { ConvertFrom-HrdnrFakeMfaKey -Key $keyText } else { Get-HrdnrFakeMfaKeyFromTenant }
+        }
+        catch {
+            Show-Message -Text $_.Exception.Message -Title (T 'Title.HrdnrKey')
+            $TxtHrdnrKey.Focus() | Out-Null
+            return
+        }
+        if ($hrdnrKey) {
+            $options.HrdnrKey = $hrdnrKey.Key
+            if (-not $keyText) { $TxtHrdnrKey.Text = $hrdnrKey.Key; Update-HrdnrKeyInput -Status (T 'Config.HrdnrKey.FromTenant' $hrdnrKey.KeyId) }
+        }
+    }
 
     $question = T 'Config.Confirm' $methodName $user.UserPrincipalName
     if ($options.ContainsKey('SerialNumber')) { $question += "`n" + (T 'Config.ConfirmSerial' $options.SerialNumber) }
+    if ($hrdnrKey) { $question += "`n`n" + (T 'Config.ConfirmHrdnr' $hrdnrKey.KeyId) }
     if ($methodId -eq 'Tap') {
         $existingTap = @($DgMethods.ItemsSource | Where-Object { $null -ne $_ -and $_.Type -eq '#microsoft.graph.temporaryAccessPassAuthenticationMethod' })
         if ($existingTap.Count) { $question += "`n`n" + (T 'Config.ConfirmReplaceTap') }
@@ -878,8 +974,11 @@ $BtnExecute.Add_Click({
         Hide-Results
         Write-UiLog (T 'Log.Provisioning' $methodName $user.UserPrincipalName) 'Warning'
         if ($methodId -eq 'Fido2') { Write-UiLog (T 'Fido2.Prompt') }
+        # the encrypted secret is stored in an open extension on the user
+        if ($hrdnrKey) { Set-ConnectionStatus (Request-M365GraphScopes -Scopes @('User.ReadWrite.All')) }
 
         $result = Invoke-MfaProvisioning -Method $methodId -User $user -Options $options
+        if ($hrdnrKey) { Save-TenantHrdnrKey -Key $hrdnrKey.Key }
 
         # The TAP and TOTP secret are intentionally not logged, only displayed.
         Write-UiLog $result.Message 'Success'

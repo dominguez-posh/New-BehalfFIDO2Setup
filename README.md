@@ -116,6 +116,14 @@ Depending on the method, matching input fields (e.g. the serial number) and a sh
 > [!IMPORTANT]
 > **TAPs, secrets and QR codes are shown only once.** They are not written to the log and cannot be retrieved later. If a QR code is saved via "Save QR code …", the file contains the secret – please delete it after programming.
 
+### Fake MFA with hrdnr
+
+If the tenant is managed with hrdnr, the secret of a fake MFA token can be **stored encrypted** instead of being discarded. hrdnr can then show the current 6-digit code in an emergency, without another method being set up.
+
+- **hrdnr key (optional):** shown when "Fake MFA" is selected. Paste the public key from hrdnr (**Users & MFA → Key for the M365 MFA Manager**, format `hrdnr-fakemfa:1:…`) or click **"Load from tenant"** if hrdnr has stored it in the tenant (organization extension `com.hrdnr.fakeMfaKey`). The tool remembers the key per tenant.
+- The secret is encrypted with this key (RSA-OAEP-SHA256) and stored in the open extension `com.hrdnr.fakeMfa` on the user (serial number, key ID, encrypted secret). Only hrdnr holds the private key; the tool itself cannot read the secret back.
+- Without a key, fake MFA works as before: the secret is discarded immediately.
+
 ---
 
 ## Create a break-glass account
@@ -284,6 +292,13 @@ Additionally for the MFA setup guide:
 | `User.ReadWrite.All` | Store the sending date in the user object |
 
 Storing the sending date requires a role that may update users, e.g. **User Administrator**.
+
+Additionally for fake MFA with an hrdnr key:
+
+| Permission | Purpose |
+|---|---|
+| `User.ReadWrite.All` | Store the encrypted secret in the user object |
+| `Organization.Read.All` | Load the hrdnr key from the tenant (only for "Load from tenant") |
 
 ### Required Entra roles for your own account
 

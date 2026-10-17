@@ -116,6 +116,14 @@ Je nach Methode erscheinen passende Eingabefelder (z. B. die Seriennummer) und e
 > [!IMPORTANT]
 > **TAP, Secrets und QR-Codes werden nur ein einziges Mal angezeigt.** Sie stehen nicht im Protokoll und können später nicht erneut abgerufen werden. Wird ein QR-Code über „QR-Code speichern …“ gesichert, enthält die Datei das Secret – nach dem Programmieren bitte löschen.
 
+### Fake-MFA mit hrdnr
+
+Wird der Mandant mit hrdnr verwaltet, kann das Secret eines Fake-MFA-Tokens **verschlüsselt hinterlegt** statt verworfen werden. hrdnr kann dann im Notfall den aktuellen 6-stelligen Code anzeigen, ohne dass eine andere Methode eingerichtet werden muss.
+
+- **hrdnr-Schlüssel (optional):** erscheint, wenn „Fake-MFA“ gewählt ist. Den öffentlichen Schlüssel aus hrdnr einfügen (**Benutzer & MFA → Schlüssel für den M365 MFA Manager**, Format `hrdnr-fakemfa:1:…`) oder **„Aus Mandant laden“** klicken, wenn hrdnr ihn im Mandanten hinterlegt hat (Erweiterung `com.hrdnr.fakeMfaKey` der Organisation). Das Tool merkt sich den Schlüssel je Mandant.
+- Das Secret wird mit diesem Schlüssel verschlüsselt (RSA-OAEP-SHA256) und in der Open Extension `com.hrdnr.fakeMfa` am Benutzer abgelegt (Seriennummer, Schlüssel-ID, verschlüsseltes Secret). Den privaten Schlüssel hat nur hrdnr; das Tool selbst kann das Secret nicht zurücklesen.
+- Ohne Schlüssel funktioniert Fake-MFA wie bisher: Das Secret wird sofort verworfen.
+
 ---
 
 ## Breakglass-Account erstellen
@@ -284,6 +292,13 @@ Zusätzlich für die MFA-Anleitung:
 | `User.ReadWrite.All` | Versanddatum im Benutzerobjekt speichern |
 
 Zum Speichern des Versanddatums ist eine Rolle nötig, die Benutzer ändern darf, z. B. **Benutzeradministrator**.
+
+Zusätzlich für Fake-MFA mit hrdnr-Schlüssel:
+
+| Berechtigung | Wofür |
+|---|---|
+| `User.ReadWrite.All` | Verschlüsseltes Secret im Benutzerobjekt hinterlegen |
+| `Organization.Read.All` | hrdnr-Schlüssel aus dem Mandanten laden (nur für „Aus Mandant laden“) |
 
 ### Benötigte Entra-Rollen des eigenen Kontos
 

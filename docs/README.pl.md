@@ -119,6 +119,14 @@ W zależności od metody pojawią się odpowiednie pola (np. numer seryjny) i kr
 > [!IMPORTANT]
 > **TAP, sekrety i kody QR są wyświetlane tylko raz.** Nie trafiają do dziennika i nie można ich później odczytać. Jeśli kod QR zostanie zapisany przez „Zapisz kod QR …”, plik zawiera sekret – usuń go po zaprogramowaniu karty.
 
+### Fałszywe MFA z hrdnr
+
+Jeśli dzierżawa jest zarządzana za pomocą hrdnr, sekret tokenu fałszywego MFA można **zapisać w postaci zaszyfrowanej** zamiast go odrzucać. W razie potrzeby hrdnr może wtedy wyświetlić aktualny 6-cyfrowy kod bez konfigurowania innej metody.
+
+- **Klucz hrdnr (opcjonalnie):** pojawia się po wybraniu „Fałszywe MFA”. Wklej klucz publiczny z hrdnr (**Użytkownicy i MFA → Klucz dla M365 MFA Manager**, format `hrdnr-fakemfa:1:…`) albo kliknij **„Wczytaj z dzierżawy”**, jeśli hrdnr zapisał go w dzierżawie (rozszerzenie `com.hrdnr.fakeMfaKey` organizacji). Narzędzie zapamiętuje klucz dla każdej dzierżawy.
+- Sekret jest szyfrowany tym kluczem (RSA-OAEP-SHA256) i zapisywany w otwartym rozszerzeniu `com.hrdnr.fakeMfa` użytkownika (numer seryjny, ID klucza, zaszyfrowany sekret). Klucz prywatny ma tylko hrdnr; samo narzędzie nie może odczytać sekretu.
+- Bez klucza fałszywe MFA działa jak dotychczas: sekret jest natychmiast odrzucany.
+
 ---
 
 ## Tworzenie konta awaryjnego
@@ -287,6 +295,13 @@ Dodatkowo dla instrukcji MFA:
 | `User.ReadWrite.All` | Zapis daty wysłania w obiekcie użytkownika |
 
 Zapis daty wysłania wymaga roli, która może modyfikować użytkowników, np. **Administrator użytkowników**.
+
+Dodatkowo dla fałszywego MFA z kluczem hrdnr:
+
+| Uprawnienie | Do czego |
+|---|---|
+| `User.ReadWrite.All` | Zapisanie zaszyfrowanego sekretu w obiekcie użytkownika |
+| `Organization.Read.All` | Wczytanie klucza hrdnr z dzierżawy (tylko dla „Wczytaj z dzierżawy”) |
 
 ### Wymagane role Entra dla własnego konta
 

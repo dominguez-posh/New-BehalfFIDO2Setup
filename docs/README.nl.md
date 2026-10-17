@@ -119,6 +119,14 @@ Afhankelijk van de methode verschijnen passende invoervelden (bijv. het serienum
 > [!IMPORTANT]
 > **TAP's, geheimen en QR-codes worden maar één keer getoond.** Ze staan niet in het logboek en kunnen later niet opnieuw worden opgevraagd. Wordt een QR-code via "QR-code opslaan …" bewaard, dan bevat het bestand het geheim – verwijder het na het programmeren.
 
+### Nep-MFA met hrdnr
+
+Wordt de tenant met hrdnr beheerd, dan kan het geheim van een nep-MFA-token **versleuteld worden opgeslagen** in plaats van verwijderd. hrdnr kan dan in een noodgeval de actuele 6-cijferige code tonen, zonder dat een andere methode hoeft te worden ingesteld.
+
+- **hrdnr-sleutel (optioneel):** verschijnt als 'Nep-MFA' is gekozen. Plak de openbare sleutel uit hrdnr (**Gebruikers & MFA → Sleutel voor de M365 MFA Manager**, formaat `hrdnr-fakemfa:1:…`) of klik op **'Uit tenant laden'** als hrdnr hem in de tenant heeft opgeslagen (extensie `com.hrdnr.fakeMfaKey` van de organisatie). De tool onthoudt de sleutel per tenant.
+- Het geheim wordt met deze sleutel versleuteld (RSA-OAEP-SHA256) en opgeslagen in de open extensie `com.hrdnr.fakeMfa` van de gebruiker (serienummer, sleutel-ID, versleuteld geheim). Alleen hrdnr heeft de privésleutel; de tool zelf kan het geheim niet teruglezen.
+- Zonder sleutel werkt nep-MFA zoals voorheen: het geheim wordt direct verwijderd.
+
 ---
 
 ## Een noodaccount aanmaken
@@ -287,6 +295,13 @@ Daarnaast voor de MFA-handleiding:
 | `User.ReadWrite.All` | Verzenddatum in het gebruikersobject opslaan |
 
 Voor het opslaan van de verzenddatum is een rol nodig die gebruikers mag wijzigen, bijv. **Gebruikersbeheerder**.
+
+Daarnaast voor nep-MFA met hrdnr-sleutel:
+
+| Machtiging | Waarvoor |
+|---|---|
+| `User.ReadWrite.All` | Versleuteld geheim in het gebruikersobject opslaan |
+| `Organization.Read.All` | hrdnr-sleutel uit de tenant laden (alleen voor 'Uit tenant laden') |
 
 ### Benodigde Entra-rollen voor uw eigen account
 
