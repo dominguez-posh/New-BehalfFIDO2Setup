@@ -165,6 +165,7 @@ Se un utente **non ha MFA o ha solo una MFA debole** (semaforo rosso o giallo), 
 - **Mittente:** per impostazione predefinita la propria cassetta postale. In alternativa una cassetta condivisa (ad es. quella dell'IT) per cui si dispone dell'autorizzazione *Invia come* – le risposte arrivano lì. L'ultimo mittente viene memorizzato.
 - **Immagini:** gli screenshot sono incorporati nell'e-mail come allegati inline (Base64) – non viene caricato nulla da Internet e vengono mostrati anche in Outlook.
 - **Data di invio nell'oggetto utente:** dopo l'invio, data, mittente e lingua vengono salvati in una open extension dell'utente (`com.m365mfatool.mfaGuide`). Le open extension esistono solo in Entra ID: sono scrivibili anche per gli utenti sincronizzati (ibridi) e non vengono mai sovrascritte da Entra Connect / Cloud Sync – a differenza di `extensionAttribute1–15`. La data è mostrata sotto il semaforo e nel report MFA (colonna **"Guida inviata"**).
+- **Cronologia degli invii (numero e orari):** una seconda open extension `com.m365mfatool.mfaGuideHistory` conta ogni invio (`sentCount`) e salva gli orari degli ultimi 20 invii con mittente e lingua (`entries`, oltre a `firstSentDateTime`/`lastSentDateTime`). La cronologia appare come tooltip sullo stato della guida e nel report MFA del tenant (colonna **"Numero"**). hrdnr legge e scrive la stessa estensione.
 
 Gli screenshot dello smartphone nell'e-mail provengono dalla documentazione Microsoft (MicrosoftDocs/entra-docs, licenza MIT); tutti gli screenshot sono anonimizzati.
 

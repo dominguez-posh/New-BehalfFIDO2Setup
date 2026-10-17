@@ -162,6 +162,7 @@ If a user has **no MFA or only weak MFA** (traffic light red or yellow), the but
 - **Sender:** by default your own mailbox. You can enter a shared mailbox (e.g. the IT mailbox) for which you have *Send As* permission – replies then go there. The last sender is remembered.
 - **Images:** the screenshots are embedded in the email as inline attachments (Base64) – nothing is loaded from the internet, and they are displayed in Outlook too.
 - **Sending date in the user object:** after sending, date, sender and language are stored in an open extension of the user (`com.m365mfatool.mfaGuide`). Open extensions exist only in Entra ID: they are writable for synchronized (hybrid) users too and are never overwritten by Entra Connect / Cloud Sync – unlike `extensionAttribute1–15`. The date is shown below the traffic light and in the tenant MFA report (column **"Guide sent"**).
+- **Sending history (count and times):** a second open extension `com.m365mfatool.mfaGuideHistory` counts every sending (`sentCount`) and keeps the times of the last 20 sendings with sender and language (`entries`, plus `firstSentDateTime`/`lastSentDateTime`). The history is shown as a tooltip on the guide status and in the tenant MFA report (column **"Count"**, tooltip on **"Guide sent"**). hrdnr reads and writes the same extension, so both tools show the same history.
 
 The smartphone screenshots in the email come from the Microsoft documentation (MicrosoftDocs/entra-docs, MIT license); all screenshots are anonymized.
 

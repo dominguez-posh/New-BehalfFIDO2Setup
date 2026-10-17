@@ -344,9 +344,13 @@ function Get-M365MfaGuideBatch {
 
     $result = @{}
     $responses = Invoke-M365UserBatch -UserIds $UserIds -Path ('/users/{0}/extensions/' + (Get-M365MfaGuideExtensionName)) -Wait $Wait
+    # history extension: how often and when (com.m365mfatool.mfaGuideHistory, shared with hrdnr)
+    $history = Invoke-M365UserBatch -UserIds $UserIds -Path ('/users/{0}/extensions/' + (Get-M365MfaGuideHistoryExtensionName)) -Wait $Wait
     foreach ($userId in $responses.Keys) {
         # 404 = never sent; other errors are ignored (the column stays empty)
-        $result[$userId] = if ($responses[$userId].Error) { $null } else { ConvertTo-M365MfaGuideInfo $responses[$userId].Body }
+        $info = if ($responses[$userId].Error) { $null } else { ConvertTo-M365MfaGuideInfo $responses[$userId].Body }
+        $h = if ($history.ContainsKey($userId) -and -not $history[$userId].Error) { ConvertTo-M365MfaGuideHistory $history[$userId].Body } else { $null }
+        $result[$userId] = Merge-M365MfaGuideInfo $info $h
     }
     $result
 }
@@ -447,6 +451,8 @@ function New-M365ReportRow {
         DaysSort          = if ($null -ne $days) { $days } elseif ($signInKnown) { [int]::MaxValue } else { -1 }
         GuideSentAt       = if ($GuideInfo) { $GuideInfo.SentAt } else { $null }
         GuideSentText     = if ($GuideInfo -and $GuideInfo.SentAt) { $GuideInfo.SentAt.ToString((T 'Format.DateTime')) } else { '' }
+        GuideCount        = if ($GuideInfo -and $GuideInfo.Count) { [int]$GuideInfo.Count } else { 0 }
+        GuideHistoryText  = if ($GuideInfo -and @($GuideInfo.History).Count) { @($GuideInfo.History | ForEach-Object { if ($_.SentAt) { '{0} ({1})' -f $_.SentAt.ToString((T 'Format.DateTime')), $_.SentBy } }) -join [Environment]::NewLine } else { '' }
         IsInactive        = $signInKnown -and ($null -eq $days -or $days -gt $script:InactiveDays)
         Id                = $User.Id
     }
@@ -564,6 +570,7 @@ function Export-M365MfaReportXlsx {
         @{ Key = 'Report.Col.MethodCount';     Width = 10; Property = 'MethodCount' }
         @{ Key = 'Report.Col.Methods';         Width = 60; Property = 'Methods' }
         @{ Key = 'Report.Col.GuideSent';       Width = 18; Property = 'GuideSentAt' }
+        @{ Key = 'Report.Col.GuideCount';      Width = 10; Property = 'GuideCount' }
         @{ Key = 'Report.Col.Enabled';         Width = 9;  Property = 'AccountEnabled' }
         @{ Key = 'Report.Col.Licensed';        Width = 10; Property = 'IsLicensed' }
         @{ Key = 'Report.Col.UserType';        Width = 11; Property = 'UserType' }

@@ -165,6 +165,7 @@ Se um utilizador **não tiver MFA ou tiver apenas MFA fraca** (semáforo vermelh
 - **Remetente:** por predefinição a sua própria caixa de correio. Pode indicar uma caixa partilhada (p. ex. a de TI) para a qual tenha a permissão *Enviar como* – as respostas chegam então aí. O último remetente é memorizado.
 - **Imagens:** as capturas estão incorporadas no e-mail como anexos inline (Base64) – nada é carregado da Internet e também são apresentadas no Outlook.
 - **Data de envio no objeto do utilizador:** após o envio, a data, o remetente e o idioma são guardados numa open extension do utilizador (`com.m365mfatool.mfaGuide`). As open extensions só existem no Entra ID: podem ser escritas também em utilizadores sincronizados (híbridos) e nunca são substituídas pelo Entra Connect / Cloud Sync – ao contrário de `extensionAttribute1–15`. A data é mostrada por baixo do semáforo e no relatório MFA (coluna **"Guia enviado"**).
+- **Histórico de envios (número e horários):** uma segunda open extension `com.m365mfatool.mfaGuideHistory` conta cada envio (`sentCount`) e guarda os horários dos últimos 20 envios com remetente e idioma (`entries`, além de `firstSentDateTime`/`lastSentDateTime`). O histórico aparece como dica no estado do guia e no relatório MFA do tenant (coluna **"Quantidade"**). O hrdnr lê e escreve a mesma extensão.
 
 As capturas do smartphone no e-mail provêm da documentação da Microsoft (MicrosoftDocs/entra-docs, licença MIT); todas as capturas estão anonimizadas.
 

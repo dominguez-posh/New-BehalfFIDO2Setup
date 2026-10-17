@@ -165,6 +165,7 @@ Jeśli użytkownik **nie ma MFA lub ma tylko słabe MFA** (sygnalizacja czerwona
 - **Nadawca:** domyślnie własna skrzynka pocztowa. Można też podać skrzynkę udostępnioną (np. działu IT), do której masz uprawnienie *Wyślij jako* – odpowiedzi trafią wtedy tam. Ostatni nadawca jest zapamiętywany.
 - **Obrazy:** zrzuty ekranu są osadzone w wiadomości jako załączniki wbudowane (Base64) – nic nie jest pobierane z internetu, a obrazy wyświetlają się także w Outlooku.
 - **Data wysłania w obiekcie użytkownika:** po wysłaniu data, nadawca i język są zapisywane w open extension użytkownika (`com.m365mfatool.mfaGuide`). Open extensions istnieją tylko w Entra ID: można je zapisywać także dla użytkowników synchronizowanych (hybrydowych) i nigdy nie są nadpisywane przez Entra Connect / Cloud Sync – w przeciwieństwie do `extensionAttribute1–15`. Data jest pokazywana pod sygnalizacją i w raporcie MFA (kolumna **"Instrukcja wysłana"**).
+- **Historia wysyłek (liczba i godziny):** druga open extension `com.m365mfatool.mfaGuideHistory` zlicza każdą wysyłkę (`sentCount`) i zapisuje godziny ostatnich 20 wysyłek z nadawcą i językiem (`entries` oraz `firstSentDateTime`/`lastSentDateTime`). Historia jest widoczna jako podpowiedź przy statusie instrukcji i w raporcie MFA tenanta (kolumna **„Liczba”**). hrdnr odczytuje i zapisuje to samo rozszerzenie.
 
 Zrzuty ekranu smartfona w wiadomości pochodzą z dokumentacji Microsoft (MicrosoftDocs/entra-docs, licencja MIT); wszystkie zrzuty ekranu są zanonimizowane.
 

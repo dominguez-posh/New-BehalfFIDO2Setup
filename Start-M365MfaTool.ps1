@@ -461,6 +461,9 @@ function Update-GuideView {
         elseif ($info.Count -gt 1) { T 'Guide.Status.SentMultiple' (Format-UiDate $info.SentAt) $info.SentBy $info.Count }
         else { T 'Guide.Status.Sent' (Format-UiDate $info.SentAt) $info.SentBy }
     # Only of interest if the user still needs MFA or the guide was already sent
+    $script:TxtGuideStatus.ToolTip = if ($info -and @($info.History).Count) {
+        (T 'Guide.History.Title') + [Environment]::NewLine + (@($info.History | Where-Object SentAt | ForEach-Object { '{0} – {1}' -f (Format-UiDate $_.SentAt), $_.SentBy }) -join [Environment]::NewLine)
+    } else { $null }
     $script:TxtGuideStatus.Visibility = if ($level -in 'Red', 'Yellow' -or $null -ne $info) { 'Visible' } else { 'Collapsed' }
 }
 

@@ -56,10 +56,11 @@ function Get-M365MfaGuideInfo {
     }
     catch {
         # 404: the user has no extension yet, i.e. the guide was never sent
-        if ("$($_.Exception.Message)" -match 'ResourceNotFound|NotFound|404|Request_ResourceNotFound') { return $null }
-        throw
+        if ("$($_.Exception.Message)" -match 'ResourceNotFound|NotFound|404|Request_ResourceNotFound') { $extension = $null }
+        else { throw }
     }
-    ConvertTo-M365MfaGuideInfo $extension
+    $history = try { Get-M365MfaGuideHistory -UserId $UserId } catch { $null }
+    Merge-M365MfaGuideInfo (ConvertTo-M365MfaGuideInfo $extension) $history
 }
 
 function Set-M365MfaGuideInfo {
@@ -88,6 +89,135 @@ function Set-M365MfaGuideInfo {
         $body['@odata.type'] = '#microsoft.graph.openTypeExtension'
         $body['extensionName'] = $script:ExtensionName
         Invoke-M365GraphRequest -Method POST -Uri "v1.0/users/$userPart/extensions" -Body $body | Out-Null
+    }
+    Add-M365MfaGuideHistory -UserId $UserId -SentBy $SentBy -Language $Language -SentAt $body['sentDateTime'] -PreviousCount $(if ($previous) { $previous.Count } else { 0 })
+}
+
+#endregion
+
+#region Sending history (count and times)
+
+<#
+    Second open extension com.m365mfatool.mfaGuideHistory, shared with hrdnr:
+      sentCount          number of guides sent in total
+      firstSentDateTime  first sending (UTC)
+      lastSentDateTime   last sending (UTC)
+      entries            JSON array of the last sendings, oldest first: [{"at":"<UTC>","by":"<sender>","lang":"de"}]
+    Open extensions hold about 2 KB, so only the last $script:HistoryMax entries are kept; sentCount keeps counting.
+    The history is stored as JSON text because open extensions store simple values reliably.
+#>
+$script:HistoryExtensionName = 'com.m365mfatool.mfaGuideHistory'
+$script:HistoryMax = 20
+
+function Get-M365MfaGuideHistoryExtensionName {
+    $script:HistoryExtensionName
+}
+
+function ConvertTo-M365MfaGuideHistory {
+    <#
+    .SYNOPSIS
+        Converts the history extension (Graph response) into Count, First, Last (local time) and Entries (SentAt, SentBy, Language).
+    #>
+    param($Extension)
+    if ($Extension -isnot [System.Collections.IDictionary]) { return $null }
+    $entries = @()
+    try {
+        $raw = [string]$Extension['entries']
+        if ($raw) {
+            # -InputObject + foreach: Windows PowerShell 5.1 passes a JSON array through the pipeline as one object
+            $entries = @(foreach ($e in (ConvertFrom-Json -InputObject $raw)) {
+                    [pscustomobject]@{ SentAt = ConvertTo-LocalDate $e.at; SentBy = [string]$e.by; Language = [string]$e.lang }
+                })
+        }
+    }
+    catch { $entries = @() }
+    [pscustomobject]@{
+        Count   = [int]$Extension['sentCount']
+        First   = ConvertTo-LocalDate $Extension['firstSentDateTime']
+        Last    = ConvertTo-LocalDate $Extension['lastSentDateTime']
+        Entries = $entries
+    }
+}
+
+function Get-M365MfaGuideHistoryRaw {
+    param([Parameter(Mandatory)][string]$UserId)
+    try {
+        Invoke-M365GraphRequest -Uri "v1.0/users/$([uri]::EscapeDataString($UserId))/extensions/$script:HistoryExtensionName"
+    }
+    catch {
+        if ("$($_.Exception.Message)" -match 'ResourceNotFound|NotFound|404|Request_ResourceNotFound') { return $null }
+        throw
+    }
+}
+
+function Get-M365MfaGuideHistory {
+    <#
+    .SYNOPSIS
+        Returns how often and when the MFA guide was sent to the user, $null if there is no history yet.
+    #>
+    param([Parameter(Mandatory)][string]$UserId)
+    ConvertTo-M365MfaGuideHistory (Get-M365MfaGuideHistoryRaw -UserId $UserId)
+}
+
+function Add-M365MfaGuideHistory {
+    <#
+    .SYNOPSIS
+        Adds a sending to the history extension (count + times).
+    .PARAMETER PreviousCount
+        Count from the first extension, used when a user has no history yet (guides sent by older versions).
+    #>
+    param(
+        [Parameter(Mandatory)][string]$UserId,
+        [Parameter(Mandatory)][string]$SentBy,
+        [Parameter(Mandatory)][string]$Language,
+        [Parameter(Mandatory)][string]$SentAt,
+        [int]$PreviousCount = 0
+    )
+    $raw = Get-M365MfaGuideHistoryRaw -UserId $UserId
+    $entries = [System.Collections.Generic.List[object]]::new()
+    if ($raw -and [string]$raw['entries']) {
+        try { foreach ($e in (ConvertFrom-Json -InputObject ([string]$raw['entries']))) {
+                # PowerShell 7 turns ISO timestamps into DateTime: write them back as UTC ISO text
+                $at = if ($e.at -is [datetime]) { $e.at.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') } else { [string]$e.at }
+                $entries.Add([ordered]@{ at = $at; by = [string]$e.by; lang = [string]$e.lang })
+            } } catch { }
+    }
+    $entries.Add([ordered]@{ at = $SentAt; by = $SentBy; lang = $Language })
+    while ($entries.Count -gt $script:HistoryMax) { $entries.RemoveAt(0) }
+    $count = if ($raw) { [int]$raw['sentCount'] + 1 } else { $PreviousCount + 1 }
+    $body = @{
+        sentCount         = $count
+        firstSentDateTime = if ($raw -and $raw['firstSentDateTime'] -is [datetime]) { $raw['firstSentDateTime'].ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
+                            elseif ($raw -and $raw['firstSentDateTime']) { [string]$raw['firstSentDateTime'] }
+                            else { [string]$entries[0].at }
+        lastSentDateTime  = $SentAt
+        entries           = ConvertTo-Json -InputObject @($entries) -Compress -Depth 3
+    }
+    $userPart = [uri]::EscapeDataString($UserId)
+    if ($raw) {
+        Invoke-M365GraphRequest -Method PATCH -Uri "v1.0/users/$userPart/extensions/$script:HistoryExtensionName" -Body $body | Out-Null
+    }
+    else {
+        $body['@odata.type'] = '#microsoft.graph.openTypeExtension'
+        $body['extensionName'] = $script:HistoryExtensionName
+        Invoke-M365GraphRequest -Method POST -Uri "v1.0/users/$userPart/extensions" -Body $body | Out-Null
+    }
+}
+
+function Merge-M365MfaGuideInfo {
+    <#
+    .SYNOPSIS
+        Combines the first extension (last sending) with the history: Count from the history, History = entries.
+    #>
+    param($Info, $History)
+    if (-not $Info -and -not $History) { return $null }
+    $last = if ($History -and @($History.Entries).Count) { @($History.Entries)[-1] } else { $null }
+    [pscustomobject]@{
+        SentAt   = if ($Info -and $Info.SentAt) { $Info.SentAt } elseif ($last) { $last.SentAt } else { $History.Last }
+        SentBy   = if ($Info -and $Info.SentBy) { $Info.SentBy } elseif ($last) { $last.SentBy } else { '' }
+        Language = if ($Info -and $Info.Language) { $Info.Language } elseif ($last) { $last.Language } else { '' }
+        Count    = if ($History -and $History.Count) { $History.Count } elseif ($Info) { $Info.Count } else { 0 }
+        History  = if ($History) { @($History.Entries) } else { @() }
     }
 }
 
@@ -317,6 +447,11 @@ function Send-M365MfaGuideMail {
 
 Export-ModuleMember -Function @(
     'Get-M365MfaGuideExtensionName'
+    'Get-M365MfaGuideHistoryExtensionName'
+    'ConvertTo-M365MfaGuideHistory'
+    'Get-M365MfaGuideHistory'
+    'Add-M365MfaGuideHistory'
+    'Merge-M365MfaGuideInfo'
     'ConvertTo-M365MfaGuideInfo'
     'Get-M365MfaGuideInfo'
     'Set-M365MfaGuideInfo'

@@ -325,7 +325,15 @@
                     </DataGridTextColumn>
                     <DataGridTextColumn Header="Report.Col.Roles" Binding="{Binding AdminRoles}" Width="220" ElementStyle="{StaticResource CellText}"/>
                     <DataGridTextColumn Header="Report.Col.Methods" Binding="{Binding Methods}" Width="260" ElementStyle="{StaticResource CellText}"/>
-                    <DataGridTextColumn Header="Report.Col.GuideSent" Binding="{Binding GuideSentText}" SortMemberPath="GuideSentAt" Width="130" ElementStyle="{StaticResource CellText}"/>
+                    <DataGridTextColumn Header="Report.Col.GuideSent" Binding="{Binding GuideSentText}" SortMemberPath="GuideSentAt" Width="130">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                <Setter Property="ToolTip" Value="{Binding GuideHistoryText}"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Report.Col.GuideCount" Binding="{Binding GuideCount}" Width="70" ElementStyle="{StaticResource CellText}"/>
                     <DataGridTextColumn Header="Report.Col.MethodCount" Binding="{Binding MethodCount}" Width="70"/>
                     <DataGridCheckBoxColumn Header="Report.Col.Enabled" Binding="{Binding AccountEnabled, Mode=OneWay}" Width="60"/>
                     <DataGridCheckBoxColumn Header="Report.Col.Licensed" Binding="{Binding IsLicensed, Mode=OneWay}" Width="70"/>
